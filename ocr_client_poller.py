@@ -285,10 +285,10 @@ def process_meter_group(meter_id: str, jobs: list[dict]) -> None:
 # -------------------------------------------------------------------
 # 🚀 Loop หลัก — ทำงานวนซ้ำตลอดเวลา
 # -------------------------------------------------------------------
-def run_forever() -> None:
     if not OCR_SERVICE_PASSWORD:
-        print("⚠️  กรุณาตั้งค่า OCR_SERVICE_PASSWORD ในไฟล์ .env ก่อนเริ่มทำงาน")
-        return
+        print("⚠️  กรุณาตั้งค่า OCR_SERVICE_PASSWORD ในไฟล์ .env ก่อนเริ่มทำงาน (Container ยังคงเปิดสแตนด์บายอยู่)", flush=True)
+        while not OCR_SERVICE_PASSWORD:
+            time.sleep(30)
 
     print(f"🚀 [ocr-client] เริ่มทำงาน — ตรวจสอบงานใหม่ทุกๆ {POLL_INTERVAL_SECONDS} วินาที...", flush=True)
     while True:
