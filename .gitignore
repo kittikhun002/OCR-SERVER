@@ -1,0 +1,29 @@
+# Environments
+yolo_env/
+meter_env/
+env/
+venv/
+
+# Python cache
+__pycache__/
+*.pyc
+.DS_Store
+
+# Large datasets & test images
+train/
+valid/
+elec/
+water/
+gas/
+fakenum/
+thaimeter/
+backup/
+review/
+AI-on-the-edge-device__manual-setup__v16.1.0/
+
+# Old versions & temp models
+ocr version old/
+meter_digits.pt
+
+# Config & secrets (สร้างบน Server เอง)
+.env
