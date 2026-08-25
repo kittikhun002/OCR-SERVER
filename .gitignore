@@ -23,7 +23,22 @@ AI-on-the-edge-device__manual-setup__v16.1.0/
 
 # Old versions & temp models
 ocr version old/
+ocr_api.py
 meter_digits.pt
+dig-class100-0182-s2_q.tflite
+data.yaml
+ocr_client_requirements.txt
+ocr_requirements.txt
+README.dataset.txt
+README.roboflow.txt
+
+# Local test files & images (เก็บไว้ในเครื่อง ไม่เอาขึ้น Git)
+roi_preview.png
+E100_0969_2582026_S1.png
+test_e2e_simulation.py
+upload_test_images_to_server.py
+test_manual.py
+test_all_scenarios.py
 
 # Config & secrets (สร้างบน Server เอง)
 .env

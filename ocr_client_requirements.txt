@@ -1,6 +1,0 @@
-httpx
-python-dotenv
-ultralytics
-opencv-python
-pytesseract
-pillow
