@@ -32,13 +32,8 @@ ocr_requirements.txt
 README.dataset.txt
 README.roboflow.txt
 
-# Local test files & images (เก็บไว้ในเครื่อง ไม่เอาขึ้น Git)
+# Local test files (เฉพาะไฟล์พรีวิวขนาดใหญ่ที่ไม่จำเป็น)
 roi_preview.png
-E100_0969_2582026_S1.png
-test_e2e_simulation.py
-upload_test_images_to_server.py
-test_manual.py
-test_all_scenarios.py
 
 # Config & secrets (สร้างบน Server เอง)
 .env
