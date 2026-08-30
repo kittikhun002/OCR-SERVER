@@ -36,6 +36,8 @@ README.roboflow.txt
 # Local test files & scratch images (เก็บไว้ในเครื่องเท่านั้น)
 roi_preview.png
 test.py
+test_*.py
+upload_*.py
 *.png
 *.jpg
 
