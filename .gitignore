@@ -19,6 +19,7 @@ fakenum/
 thaimeter/
 backup/
 review/
+downloads/
 AI-on-the-edge-device__manual-setup__v16.1.0/
 
 # Old versions & temp models
@@ -32,8 +33,11 @@ ocr_requirements.txt
 README.dataset.txt
 README.roboflow.txt
 
-# Local test files (เฉพาะไฟล์พรีวิวขนาดใหญ่ที่ไม่จำเป็น)
+# Local test files & scratch images (เก็บไว้ในเครื่องเท่านั้น)
 roi_preview.png
+test.py
+*.png
+*.jpg
 
 # Config & secrets (สร้างบน Server เอง)
 .env

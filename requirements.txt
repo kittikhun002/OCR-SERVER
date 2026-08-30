@@ -5,3 +5,4 @@ httpx
 python-dotenv
 pillow
 numpy
+google-generativeai

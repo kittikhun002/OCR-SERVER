@@ -1,76 +1,56 @@
 """
 test_fetch_filenames.py
 --------------------------------------------------------------------------
-ทดสอบเฉพาะ Step 1 & 2:
-1. เชื่อมต่อ Server ตามค่าใน .env
-2. ยิงขอคิวงานเพื่อดึง 'รายชื่อไฟล์' (filename) มาดู
-3. ตัด 4 ตัวแรกของชื่อไฟล์และจัดกลุ่มให้ดู
-(สคริปต์นี้จะไม่ดาวน์โหลดรูปภาพ และจะไม่รัน OCR ครับ)
+สคริปต์ทดสอบดึงคิวงานจาก Image Store Server จริง (https://cfo.ntplc.co.th/iot)
+ผ่าน Header X-OCR-Key
 """
 
 import os
-import sys
-import json
+import httpx
 from dotenv import load_dotenv
-from ocr_client_poller import _login, _request, API_GET_JOBS, BATCH_SIZE, METER_ID_PREFIX_LEN
-from collections import defaultdict
-
-if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
 
 load_dotenv()
 
-def test_fetch_only_filenames():
+IMAGE_STORE_BASE_URL = os.getenv("IMAGE_STORE_BASE_URL", "https://cfo.ntplc.co.th/iot").rstrip("/")
+IMAGE_STORE_VERIFY_TLS = os.getenv("IMAGE_STORE_VERIFY_TLS", "true").lower() == "true"
+OCR_API_KEY = os.getenv("OCR_API_KEY", "")
+
+def test_fetch():
     print("=" * 65)
-    print("🔍 กำลังทดสอบดึงรายชื่อไฟล์จาก Server...")
-    print(f"🌐 Server URL: {os.getenv('IMAGE_STORE_BASE_URL')}")
+    print("🔍 กำลังทดสอบดึงคิวงานจาก Image Store Server...")
+    print(f"🌐 Server URL: {IMAGE_STORE_BASE_URL}")
+    print(f"🔑 X-OCR-Key:  {'*' * len(OCR_API_KEY) if OCR_API_KEY else '(ไม่ได้ระบุ)'}")
     print("=" * 65)
+
+    headers = {}
+    if OCR_API_KEY:
+        headers["X-OCR-Key"] = OCR_API_KEY
 
     try:
-        # 1. ทดสอบ Login
-        print("\n[Step 0] 🔑 กำลังล็อกอินเข้า Server...")
-        token = _login()
-        print(f"   ✅ ล็อกอินสำเร็จ (Token: {token[:15]}...)")
-
-        # 2. ทดสอบขอรายชื่อไฟล์
-        print(f"\n[Step 1] 📋 กำลังยิงขอรายการงานจาก '{API_GET_JOBS}'...")
-        resp = _request("GET", API_GET_JOBS, params={"job_status": "queued", "limit": BATCH_SIZE})
-        resp.raise_for_status()
-        jobs = resp.json()
-
-        print(f"   📥 ได้รับข้อมูลตอบกลับมาจาก Server: {len(jobs)} รายการ")
+        url = f"{IMAGE_STORE_BASE_URL}/admin/images/ocr"
+        print(f"\n📡 ยิง GET {url}?job_status=queued ...")
         
-        if not jobs:
-            print("\n⚠️ ตอนนี้ยังไม่มีงานในคิวบน Server (คิวว่างเปล่า)")
-            return
+        resp = httpx.get(
+            url,
+            params={"job_status": "queued", "limit": 10},
+            headers=headers,
+            verify=IMAGE_STORE_VERIFY_TLS,
+            timeout=15.0
+        )
+        print(f"📥 สถานะ HTTP Response: {resp.status_code}")
 
-        print("\n--- 📄 รายชื่อไฟล์ดิบที่ได้มาจาก Server ---")
-        for i, job in enumerate(jobs, 1):
-            job_id = job.get("id")
-            filename = job.get("filename", "ไม่มีชื่อไฟล์")
-            image_id = job.get("image_id")
-            print(f"   {i}. Job ID #{job_id} | Image ID: {image_id} | Filename: '{filename}'")
-
-        # 3. ทดสอบตัด 4 ตัวแรกเพื่อจัดกลุ่ม
-        print(f"\n[Step 2] ✂️  ทดสอบตัด {METER_ID_PREFIX_LEN} ตัวแรกของชื่อไฟล์เพื่อจัดกลุ่มมิเตอร์:")
-        groups = defaultdict(list)
-        for job in jobs:
-            filename = job.get("filename", "")
-            prefix = filename[:METER_ID_PREFIX_LEN]
-            groups[prefix].append(job)
-
-        for prefix, group_jobs in groups.items():
-            filenames_in_group = [j.get("filename") for j in group_jobs]
-            print(f"\n   🏷️  กลุ่มรหัสมิเตอร์ '{prefix}': มี {len(group_jobs)} รูป")
-            for fn in filenames_in_group:
-                print(f"      - {fn}")
-
-        print("\n" + "=" * 65)
-        print("✅ ทดสอบดึงรายชื่อไฟล์และจัดกลุ่มสำเร็จเรียบร้อย!")
-        print("=" * 65)
+        if resp.status_code == 200:
+            jobs = resp.json()
+            print(f"\n✅ เชื่อมต่อสำเร็จ! พบคิวงานที่รออยู่: {len(jobs)} งาน")
+            for idx, job in enumerate(jobs, start=1):
+                print(f"   {idx}. Job ID: #{job.get('id')} | Meter ID: {job.get('meter_id')} | File: {job.get('original_filename')}")
+        elif resp.status_code in (401, 403):
+            print(f"\n❌ เข้าใช้งานไม่ได้ (HTTP {resp.status_code}): ตรวจสอบ OCR_API_KEY ในไฟล์ .env")
+        else:
+            print(f"\n⚠️ ได้รับ Response: {resp.text}")
 
     except Exception as exc:
-        print(f"\n❌ เกิดข้อผิดพลาด: {exc}")
+        print(f"\n❌ เกิดข้อผิดพลาดในการเชื่อมต่อ: {exc}")
 
 if __name__ == "__main__":
-    test_fetch_only_filenames()
+    test_fetch()

@@ -193,11 +193,28 @@ def run_multi_image_pipeline(image_paths: list, meter_type: str = "auto", expect
         print(f"\n🎉 [เลือกภาพที่ชัดที่สุด Highest Confidence] ได้ผลลัพธ์: {best_conf_item['reading']}")
         return best_conf_item
 
-    # 2. ถ้า Local AI ไม่ผ่าน ให้เช็คผลจาก Gemini
+    # 2. ถ้า Local AI ไม่ผ่าน ให้เช็คผลจาก Gemini ด้วย Majority Vote 2 ใน 3
     gemini_approved = [r for r in all_results if r.get("status") == "APPROVED_GEMINI"]
     if gemini_approved:
-        print(f"\n✨ [ยืนยันโดย Gemini Vision] ได้ผลลัพธ์: {gemini_approved[0]['reading']}")
-        return gemini_approved[0]
+        g_raw_votes = [r["raw"] for r in gemini_approved]
+        g_vote_counts = Counter(g_raw_votes)
+        g_best_raw, g_count = g_vote_counts.most_common(1)[0]
+
+        # ต้องมีเสียงโหวตตรงกันอย่างน้อย 2 ใน 3 ภาพ
+        if g_count >= 2:
+            g_best_item = next(r for r in gemini_approved if r["raw"] == g_best_raw)
+            print(f"\n✨ [ยืนยันโดย Gemini Vision Majority Vote {g_count}/{len(image_paths)}] ได้ผลลัพธ์: {g_best_item['reading']}")
+            return {
+                "status": "APPROVED_GEMINI",
+                "reading": g_best_item["reading"],
+                "raw": g_best_item["raw"],
+                "reason": g_best_item.get("reason"),
+                "meter_type": meter_type,
+                "vote_ratio": f"{g_count}/{len(image_paths)}",
+                "selected_image": g_best_item["image_path"]
+            }
+        else:
+            print(f"\n⚠️ [Gemini Vision อ่านได้ผลไม่ตรงกัน ({g_count}/{len(image_paths)}) -> ส่งต่อให้คนตรวจ]")
 
     # 3. ถ้าไม่มีภาพไหนผ่านเลย -> ส่งคนตรวจ
     print("\n🚩 [ทุกภาพไม่ผ่านเกณฑ์ -> ส่งต่อให้คนตรวจ]")
