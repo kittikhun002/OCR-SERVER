@@ -234,17 +234,20 @@ def process_single_job(job: dict) -> None:
         # 2 = ตรวจไม่พบตัวเลขในภาพ (no_digits_found)
         # 3 = ค่ามิเตอร์ลดลง หรือ การใช้พุ่งผิดปกติ (reading_decreased / usage_anomaly)
         # -------------------------------------------------------------------
-        error_type: int = 0
-        ocr_reading: float | None = None
+        reading_str = pipeline_output.get("reading", "")
+        # ดึงตัวเลขพร้อมจุดทศนิยมจาก reading (เช่น "0033.1 kWh" -> "0033.1")
+        if reading_str:
+            digits_only = "".join(c for c in reading_str.split()[0] if c.isdigit() or c == ".")
+        else:
+            digits_only = "".join(c for c in raw_str if c.isdigit() or c == ".")
 
-        if status in ["APPROVED_LOCAL", "APPROVED_GEMINI"]:
-            # ✅ เคส 0: สำเร็จ
+        if status in ["APPROVED_LOCAL", "APPROVED_GEMINI"] and digits_only:
+            # ✅ เคส 0: สำเร็จ (มีตัวเลขชัดเจน)
             error_type = 0
             try:
-                ocr_reading = float(raw_str)
+                ocr_reading = float(digits_only)
             except ValueError:
-                ocr_reading = float("".join(c for c in raw_str if c.isdigit() or c == ".") or "0")
-
+                ocr_reading = float(digits_only.replace(".", "", digits_only.count(".") - 1))
         else:
             # ❌ เกิดข้อผิดพลาดทางธุรกิจ
             joined_errs = " ".join(local_errors).lower()
@@ -258,7 +261,7 @@ def process_single_job(job: dict) -> None:
                 # เคส 3: reading_decreased / usage_anomaly (ต้องส่ง ocr_reading)
                 error_type = 3
                 try:
-                    ocr_reading = float(raw_str)
+                    ocr_reading = float(digits_only) if digits_only else None
                 except ValueError:
                     ocr_reading = None
 

@@ -217,10 +217,17 @@ def run_multi_image_pipeline(image_paths: list, meter_type: str = "auto", expect
             print(f"\n⚠️ [Gemini Vision อ่านได้ผลไม่ตรงกัน ({g_count}/{len(image_paths)}) -> ส่งต่อให้คนตรวจ]")
 
     # 3. ถ้าไม่มีภาพไหนผ่านเลย -> ส่งคนตรวจ
+    all_errs = []
+    for r in all_results:
+        all_errs.extend(r.get("local_errors", []))
+    if not all_errs:
+        all_errs = ["ภาพอ่านไม่ออกหรือไม่พบช่องตัวเลข"]
+
     print("\n🚩 [ทุกภาพไม่ผ่านเกณฑ์ -> ส่งต่อให้คนตรวจ]")
     return {
         "status": "HUMAN_REVIEW_REQUIRED",
         "meter_type": meter_type,
+        "local_errors": all_errs,
         "all_results": all_results
     }
 

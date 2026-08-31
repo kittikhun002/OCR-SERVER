@@ -42,11 +42,12 @@ Format:
 
     try:
         # พยายามใช้ google-genai หรือ fallback เป็น google-generativeai
+        model_name = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
         try:
             from google import genai
             client = genai.Client(api_key=api_key)
             response = client.models.generate_content(
-                model="gemini-3.6-flash",
+                model=model_name,
                 contents=[
                     genai.types.Part.from_bytes(
                         data=image_path.read_bytes(),
@@ -60,7 +61,7 @@ Format:
             import google.generativeai as genai
             import PIL.Image
             genai.configure(api_key=api_key)
-            model = genai.GenerativeModel("gemini-3.6-flash")
+            model = genai.GenerativeModel(model_name)
             img = PIL.Image.open(image_path)
             response = model.generate_content([prompt, img])
             text = response.text.strip()
