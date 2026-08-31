@@ -157,6 +157,7 @@ def validate_meter(results, min_conf=0.60, current_reading: float = None, histor
     - current_reading: ค่ามิเตอร์ที่อ่านได้เดือนนี้ (สำหรับ Rule 3 & 4)
     - history: ประวัติค่ามิเตอร์ย้อนหลัง เช่น [1200.5, 1250.0, 1310.2] (สำหรับ Rule 3 & 4)
     Return: (is_valid: bool, errors: list)
+    """
     errors = []
 
     # ถ้าไม่พบช่องตัวเลขเลย ให้ถือว่าไม่ผ่านทันที
