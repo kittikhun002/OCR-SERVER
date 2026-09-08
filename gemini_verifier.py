@@ -7,6 +7,9 @@ import os
 import sys
 import json
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -17,7 +20,7 @@ def verify_with_gemini(image_path: str, error_notes: str = "", api_key: str = No
     ส่งภาพมิเตอร์และข้อความแจ้งปัญหาไปให้ Gemini Vision ช่วยอ่านซ้ำ
     Return: dict {"success": bool, "reading": str, "reason": str, "error": str}
     """
-    api_key = api_key or os.environ.get("GEMINI_API_KEY")
+    api_key = (api_key or os.environ.get("GEMINI_API_KEY", "")).strip()
     if not api_key:
         return {"success": False, "error": "ไม่ได้ตั้งค่า GEMINI_API_KEY"}
 
@@ -42,7 +45,7 @@ Format:
 
     try:
         # พยายามใช้ google-genai หรือ fallback เป็น google-generativeai
-        model_name = os.environ.get("GEMINI_MODEL", "gemini-1.5-flash")
+        model_name = os.environ.get("GEMINI_MODEL", "gemini-3.7-flash")
         try:
             from google import genai
             client = genai.Client(api_key=api_key)

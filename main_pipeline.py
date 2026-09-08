@@ -200,8 +200,8 @@ def run_multi_image_pipeline(image_paths: list, meter_type: str = "auto", expect
         g_vote_counts = Counter(g_raw_votes)
         g_best_raw, g_count = g_vote_counts.most_common(1)[0]
 
-        # ต้องมีเสียงโหวตตรงกันอย่างน้อย 2 ใน 3 ภาพ
-        if g_count >= 2:
+        # ต้องมีเสียงโหวตตรงกันอย่างน้อย 2 ใน 3 ภาพ (หรือถ้ามีภาพเดียวให้อนุมัติตามภาพนั้น)
+        if g_count >= 2 or len(gemini_approved) == 1:
             g_best_item = next(r for r in gemini_approved if r["raw"] == g_best_raw)
             print(f"\n✨ [ยืนยันโดย Gemini Vision Majority Vote {g_count}/{len(image_paths)}] ได้ผลลัพธ์: {g_best_item['reading']}")
             return {

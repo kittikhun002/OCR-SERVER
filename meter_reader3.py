@@ -55,16 +55,11 @@ class DigitCNN:
         self.interpreter.invoke()
         output = self.interpreter.get_tensor(self.out_detail["index"])[0].reshape(-1).astype(np.float32)
 
-        # Dequantize
-        scale, zero_pt = self.out_detail["quantization"]
-        scores = (output - zero_pt) * scale if scale else output
-        class_idx = int(np.argmax(scores))
+        # Output จากโมเดล TFLite เป็นค่า Softmax ความน่าจะเป็น [0.0 - 1.0] อยู่แล้ว
+        class_idx = int(np.argmax(output))
+        conf = float(output[class_idx])
 
-        # Softmax confidence
-        exp_s = np.exp(scores - np.max(scores))
-        conf = float(exp_s[class_idx] / np.sum(exp_s))
-
-        if class_idx == 10:  # Class 10 = Rolling transition (NaN)
+        if class_idx == 10:  # Class 10 = Rolling transition (กำลังหมุนกึ่งกลาง)
             return {"value": "N", "digit": None, "confidence": conf}
         return {"value": str(class_idx), "digit": class_idx, "confidence": conf}
 
@@ -140,6 +135,22 @@ def cluster_and_complete_wheels(detections, img_shape, expected_digits=None, met
 
     if len(groups) < 2:
         return groups
+
+    # กรอง Outlier ที่ขอบนอก (เช่น ตัวอักษร 'm' หรือขอบกรอบ ที่มี confidence ต่ำและระยะห่างกระโดด)
+    if len(groups) >= 3:
+        centers = [float(np.mean([d["x"] for d in g])) for g in groups]
+        dxs = [centers[i+1] - centers[i] for i in range(len(centers)-1)]
+        med_dx = float(np.median(dxs)) if dxs else 0
+        if med_dx > 0:
+            # ตรวจขอบขวาสุด
+            if dxs[-1] > 1.28 * med_dx and max(d["conf"] for d in groups[-1]) < 0.50:
+                groups = groups[:-1]
+            # ตรวจขอบซ้ายสุด
+            if len(groups) >= 3:
+                centers = [float(np.mean([d["x"] for d in g])) for g in groups]
+                dxs = [centers[i+1] - centers[i] for i in range(len(centers)-1)]
+                if dxs[0] > 1.28 * med_dx and max(d["conf"] for d in groups[0]) < 0.50:
+                    groups = groups[1:]
 
     # Extrapolate missing wheels using step distance
     h, w = img_shape[:2]

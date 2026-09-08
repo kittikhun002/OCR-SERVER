@@ -9,8 +9,8 @@ ocr_client_poller.py
 3. ตรวจสอบสถานะการทดสอบ (Check Test Flag)   -> ตรวจคำว่า "test" ในชื่อไฟล์/URL (is_test = True/False)
 4. ดาวน์โหลดรูปภาพแบบ Dynamic (Download)    -> โหลดทุกภาพในกลุ่มเข้า downloads/ ไม่จำกัดขั้นต่ำ
 5. จัดการประวัติมิเตอร์ตามเงื่อนไข (History)  -> ถ้า is_test=True ข้ามประวัติ (history=[]), ถ้า False ดึงปกติ
-6. ประมวลผลภาพด้วย AI (Run OCR Pipeline)    -> YOLO + CNN + 4 Rules + Majority Vote (2 ใน 3)
-7. แยก Endpoint ส่งผลลัพธ์ (Submit Result)  -> ส่ง error_type และ ocr_reading ไปยังตาราง Test หรือ Production
+6. ประมวลผลภาพด้วย AI (Run OCR Pipeline)    -> YOLO + CNN + 3 Rules + Majority Vote (2 ใน 3) + Gemini Fallback
+7. แยก Endpoint ส่งผลลัพธ์ (Submit Result)  -> ส่ง error_type, ocr_reading และ ocr_engine ไปยังตาราง Test หรือ Production
 """
 
 import os
@@ -161,7 +161,16 @@ def fetch_meter_history(meter_id: str) -> list[float]:
             entries = resp.json()
             history = []
             if isinstance(entries, list):
+                # เรียงลำดับจากเก่าไปใหม่ เพื่อให้ history[-1] คือค่าเดือนล่าสุดเสมอ
+                try:
+                    entries = sorted(entries, key=lambda x: (x.get("created_at") or x.get("id") or 0) if isinstance(x, dict) else 0)
+                except Exception:
+                    pass
+
                 for entry in entries:
+                    if isinstance(entry, (int, float)):
+                        history.append(float(entry))
+                        continue
                     reading_val = entry.get("ocr_reading")
                     err = entry.get("error_type")
                     if reading_val is not None and (err is None or err == 0):
@@ -169,7 +178,7 @@ def fetch_meter_history(meter_id: str) -> list[float]:
                             history.append(float(reading_val))
                         except (ValueError, TypeError):
                             pass
-            print(f"   📊 ประวัติอ่านสำเร็จย้อนหลัง: {history}", flush=True)
+            print(f"   📊 ประวัติอ่านสำเร็จย้อนหลัง (เก่า->ใหม่): {history}", flush=True)
             return history
         else:
             print(f"   ⚠️ ไม่พบประวัติเดิม (HTTP {resp.status_code}) — ข้ามไปทำต่อ", flush=True)
@@ -201,7 +210,7 @@ def process_single_job(job: dict) -> None:
     if is_test:
         print(f"   🏷️ โหมดการทำงาน: 🧪 TEST (ตรวจพบคำว่า 'test' -> ข้ามประวัติ / error_type 0-2)", flush=True)
     else:
-        print(f"   🏷️ โหมดการทำงาน: 🏢 PRODUCTION (งานจริง -> ตรวจครบ 4 กฎ / error_type 0-3)", flush=True)
+        print(f"   🏷️ โหมดการทำงาน: 🏢 PRODUCTION (งานจริง -> ตรวจครบ 3 กฎ / error_type 0-3)", flush=True)
 
     # --- Step 5: จัดการประวัติมิเตอร์ตามเงื่อนไข (Conditional History) ---
     if is_test:
@@ -277,8 +286,12 @@ def process_single_job(job: dict) -> None:
         # --- Step 7: แยก Endpoint ส่งผลลัพธ์ (Submit Result by Flag) ---
         print(f"\n[Step 7] 📤 กำลังส่งผลลัพธ์กลับ Server...")
 
+        # ระบุว่าผลลัพธ์ได้รับการยืนยันโดยโมเดลใด (1 = LOCAL, 2 = GEMINI)
+        ocr_engine: int = 2 if status == "APPROVED_GEMINI" else 1
+
         form_data = {
             "error_type": error_type,
+            "ocr_engine": ocr_engine,
         }
         if ocr_reading is not None and error_type in (0, 3):
             form_data["ocr_reading"] = ocr_reading
@@ -294,8 +307,9 @@ def process_single_job(job: dict) -> None:
         submit_resp = _request("POST", target_endpoint, data=form_data)
         submit_resp.raise_for_status()
 
+        engine_name = "GEMINI" if ocr_engine == 2 else "LOCAL"
         print(f"✅ งาน #{job_id} ({'Test' if is_test else 'Production'}) เสร็จสมบูรณ์!", flush=True)
-        print(f"   • ผลลัพธ์: error_type={error_type} | ocr_reading={ocr_reading}", flush=True)
+        print(f"   • ผลลัพธ์: error_type={error_type} | ocr_reading={ocr_reading} | ocr_engine={ocr_engine} ({engine_name})", flush=True)
 
     except Exception as exc:
         print(f"❌ เกิดข้อผิดพลาดกับงาน #{job_id}: {exc}", flush=True)
@@ -303,6 +317,13 @@ def process_single_job(job: dict) -> None:
             _request("POST", API_SUBMIT_FAIL.format(job_id=job_id), json={"error": str(exc)[:2000]})
         except Exception:
             pass
+    finally:
+        # 🧹 ล้างไฟล์ภาพที่ดาวน์โหลดมาชั่วคราว เพื่อประหยัดพื้นที่ดิสก์ใน Container
+        for p in image_paths:
+            try:
+                Path(p).unlink(missing_ok=True)
+            except Exception:
+                pass
 
 
 # -------------------------------------------------------------------
