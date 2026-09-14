@@ -32,8 +32,8 @@ def verify_with_gemini(image_path: str, error_notes: str = "", api_key: str = No
 Our automated computer vision system tried to read this meter image, but encountered uncertainties:
 [Issues]: {error_notes}
 
-Please carefully inspect the meter dials/wheels from left to right:
-1. Read each digit from left to right.
+Please carefully inspect all meter dials/wheels from left to right:
+1. Read every single digit wheel, including both black (integer) wheels and red (decimal/fractional) wheels.
 2. Return ONLY valid JSON format without markdown code blocks.
 
 Format:
@@ -45,7 +45,7 @@ Format:
 
     try:
         # พยายามใช้ google-genai หรือ fallback เป็น google-generativeai
-        model_name = os.environ.get("GEMINI_MODEL", "gemini-3.7-flash")
+        model_name = os.environ.get("GEMINI_MODEL", "gemini-3.5-flash-lite")
         try:
             from google import genai
             client = genai.Client(api_key=api_key)
@@ -69,9 +69,14 @@ Format:
             response = model.generate_content([prompt, img])
             text = response.text.strip()
 
-        # ลบ markdown code block ออก
+        # ลบ markdown code block ออกและสกัด JSON ก้อนหลักอย่างปลอดภัย
         text = text.replace("```json", "").replace("```", "").strip()
-        data = json.loads(text)
+        start_idx = text.find("{")
+        end_idx = text.rfind("}")
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            data = json.loads(text[start_idx:end_idx + 1])
+        else:
+            data = json.loads(text)
 
         return {
             "success": True,

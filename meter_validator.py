@@ -14,13 +14,37 @@ if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 
-def check_confidence(results, min_conf=0.60):
+# กำหนดจำนวนหลักมาตรฐานของมิเตอร์แต่ละชนิด
+VALID_DIGIT_COUNTS = {
+    "elec":  {5},            # ไฟฟ้าต้อง 5 หลัก
+    "gas":   {8},            # แก๊สต้อง 8 หลัก
+    "water": {4, 5, 7, 8},   # น้ำยอมรับได้ทั้ง 4, 5, 7, 8 หลัก
+}
+
+
+def check_confidence(results, min_conf=0.60, meter_type="auto"):
     """
-    กฎข้อที่ 1: ตรวจสอบความมั่นใจ (Confidence)
+    กฎข้อที่ 1: ตรวจสอบความมั่นใจและความสมบูรณ์ของตัวเลข (Confidence & Completeness)
+    - จำนวนหลักต้องตรงตามมาตรฐานของมิเตอร์ประเภทนั้นๆ
     - ต้องไม่มีตัว '?'
     - ค่าความมั่นใจต้องไม่ต่ำกว่า min_conf
     """
     errors = []
+
+    # 1.1 ตรวจสอบจำนวนหลักตามประเภทมิเตอร์
+    valid_set = VALID_DIGIT_COUNTS.get(meter_type)
+    if valid_set and len(results) not in valid_set:
+        errors.append(
+            f"[Rule 1] จำนวนหลักไม่ถูกต้อง: ตรวจพบ {len(results)} หลัก "
+            f"(มิเตอร์ประเภท {meter_type} ต้องมี {sorted(list(valid_set))} หลัก)"
+        )
+    elif meter_type == "water" and len(results) == 4:
+        # ดักเคสพิเศษ: มิเตอร์น้ำ 4 หลักแท้ต้องเป็นดำล้วน ถ้ามีล้อสีแดงปนมา แสดงว่าอ่านขาดจากรุ่น 5 หลัก
+        if any(r.get("is_red", False) for r in results):
+            errors.append(
+                f"[Rule 1] โครงสร้างหลักผิดปกติ: ตรวจพบ 4 หลักแต่มีล้อสีแดงปนมา (น่าจะอ่านขาดจากรุ่น 5 หลัก)"
+            )
+
     for r in results:
         pos = r.get("pos", "?")
         val = r.get("val_after", "?")
@@ -114,10 +138,10 @@ def check_usage_not_abnormal(current_reading: float, history: list, spike_multip
 # ===================================================================
 # ฟังก์ชันหลัก: รวมทุกกฎเข้าด้วยกัน (3 กฎมาตรฐาน)
 # ===================================================================
-def validate_meter(results, min_conf=0.60, current_reading: float = None, history: list = None):
+def validate_meter(results, min_conf=0.60, current_reading: float = None, history: list = None, meter_type: str = "auto"):
     """
     ฟังก์ชันหลัก: รวมการตรวจ 3 กฎมาตรฐานเข้าด้วยกัน
-    - Rule 1: ความชัดเจนของตัวเลข (Confidence Check)
+    - Rule 1: ความชัดเจนและความสมบูรณ์ของตัวเลข (Confidence & Completeness Check)
     - Rule 2: ค่ามิเตอร์ต้องไม่ลดลง (Reading Not Decreased)
     - Rule 3: อัตราการใช้ต้องไม่พุ่งผิดปกติ (Usage Anomaly Check)
     Return: (is_valid: bool, errors: list)
@@ -128,8 +152,8 @@ def validate_meter(results, min_conf=0.60, current_reading: float = None, histor
     if not results:
         return False, ["ไม่พบล้อตัวเลขในภาพเลย"]
 
-    # Rule 1: ตรวจความมั่นใจของตัวเลข (Confidence)
-    errors.extend(check_confidence(results, min_conf=min_conf))
+    # Rule 1: ตรวจความมั่นใจและความสมบูรณ์ของตัวเลข (Confidence & Completeness)
+    errors.extend(check_confidence(results, min_conf=min_conf, meter_type=meter_type))
 
     # Rule 2 & 3: ตรวจจากประวัติ (ถ้ามี)
     if current_reading is not None and history:

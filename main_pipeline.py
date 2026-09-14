@@ -55,9 +55,9 @@ def step1_read_with_local_ai(image_path: str, meter_type: str = "auto", expected
 # ==========================================================
 # 🔹 ขั้นตอนที่ 2: ตรวจสอบด้วย Rule-Based
 # ==========================================================
-def step2_validate_rules(results: list, min_conf: float = 0.60, current_reading: float = None, history: list = None):
+def step2_validate_rules(results: list, min_conf: float = 0.60, current_reading: float = None, history: list = None, meter_type: str = "auto"):
     print(f"[ขั้นตอนที่ 2] ⚖️ กำลังตรวจสอบความถูกต้องด้วย Rule-Base...")
-    is_valid, errors = validate_meter(results, min_conf=min_conf, current_reading=current_reading, history=history)
+    is_valid, errors = validate_meter(results, min_conf=min_conf, current_reading=current_reading, history=history, meter_type=meter_type)
 
     if is_valid:
         print("  • ผลการตรวจ: ✅ ผ่านเกณฑ์ทุกข้อ (ตัวเลขชัดเจน & กลไกเฟืองถูกต้อง & ประวัติสมเหตุสมผล)")
@@ -89,13 +89,14 @@ def step3_verify_with_gemini(image_path: str, errors: list, gemini_key: str = No
 # ==========================================================
 # 🔹 ขั้นตอนที่ 4: ส่งต่อให้เจ้าหน้าที่ตรวจสอบ (Human Review)
 # ==========================================================
-def step4_escalate_to_human(image_path: str, local_errors: list, gemini_error: str = None):
+def step4_escalate_to_human(image_path: str, local_errors: list, gemini_error: str = None, ocr_engine: int = 110):
     print(f"\n[ขั้นตอนที่ 4] 🚩 ส่งต่อให้เจ้าหน้าที่ตรวจสอบ (Human Review Required)")
     return {
         "status": "HUMAN_REVIEW_REQUIRED",
         "image_path": str(image_path),
         "local_errors": local_errors,
-        "gemini_error": gemini_error
+        "gemini_error": gemini_error,
+        "ocr_engine": ocr_engine
     }
 
 
@@ -107,9 +108,13 @@ def run_pipeline(image_path: str, meter_type: str = "auto", expected_digits: int
     if meter_type == "auto":
         meter_type = detect_meter_type(image_path)
 
+    score = 0  # แต้มสะสม Summation Score (YOLO: พัน, CNN: ร้อย, Gemini: สิบ)
+
+    # 🔹 Stage 1: อ่านภาพด้วย Local AI (YOLO + CNN)
     local_data = step1_read_with_local_ai(image_path, meter_type, expected_digits)
     if not local_data:
-        return step4_escalate_to_human(image_path, local_errors=["ไม่สามารถเปิดหรือประมวลผลภาพได้"])
+        score += 1000 + 100 + 10  # เปิดภาพไม่ได้ -> 1110
+        return step4_escalate_to_human(image_path, local_errors=["ไม่สามารถเปิดหรือประมวลผลภาพได้"], ocr_engine=score)
 
     results = local_data["results"]
     formatted = local_data["formatted"]
@@ -117,30 +122,73 @@ def run_pipeline(image_path: str, meter_type: str = "auto", expected_digits: int
     raw_str = str(formatted.get("raw_a", ""))
     raw_val = float(raw_str) if raw_str.replace(".", "", 1).isdigit() else None
 
-    is_valid, errors = step2_validate_rules(results, min_conf=min_conf, current_reading=raw_val, history=history)
+    # ตรวจสอบว่า YOLO เจอกล่องครบตามประเภทมิเตอร์หรือไม่ (หลักพัน)
+    valid_counts = {"elec": {5}, "gas": {8}, "water": {4, 5, 7, 8}}
+    yolo_ok = len(results) in valid_counts.get(meter_type, {len(results)})
+    if not yolo_ok:
+        score += 1000  # YOLO หากล่องไม่ครบ บวก 1000
 
-    if is_valid:
+    # 🔹 Stage 2: ตรวจสอบความถูกต้องด้วย Rule-Base (หลักร้อย)
+    is_valid, errors = step2_validate_rules(results, min_conf=min_conf, current_reading=raw_val, history=history, meter_type=meter_type)
+    if not is_valid:
+        score += 100  # ตัวเลขอ่านไม่ออก / เบลอ / Rule ไม่ผ่าน บวก 100
+
+    # กรณี Local AI ผ่านฉลุยทั้ง 2 ด่าน (score ยังคงเป็น 0)
+    if score == 0:
         return {
             "status": "APPROVED_LOCAL",
             "reading": formatted["fmt_a"],
             "raw": formatted["raw_a"],
             "image_path": str(image_path),
             "meter_type": meter_type,
-            "confidence": sum(r["confidence"] for r in results) / len(results) if results else 0.0
+            "confidence": sum(r["confidence"] for r in results) / len(results) if results else 0.0,
+            "ocr_engine": score  # 0
         }
 
+    # 🔹 Stage 3: ส่งให้ Gemini Vision ช่วยกู้ผลลัพธ์ (หลักสิบ)
     gemini_res = step3_verify_with_gemini(image_path, errors, gemini_key)
     if gemini_res.get("success"):
-        return {
-            "status": "APPROVED_GEMINI",
-            "reading": gemini_res["reading"],
-            "raw": "".join(c for c in gemini_res["reading"] if c.isdigit()),
-            "reason": gemini_res.get("reason"),
-            "image_path": str(image_path),
-            "meter_type": meter_type
-        }
+        gemini_reading = str(gemini_res.get("reading", ""))
+        raw_digits = "".join(c for c in gemini_reading if c.isdigit())
+        num_str = "".join(c for c in gemini_reading if c.isdigit() or c == ".")
+        gemini_val = float(num_str) if num_str.replace(".", "", 1).isdigit() else None
 
-    return step4_escalate_to_human(image_path, local_errors=errors, gemini_error=gemini_res.get("error"))
+        gemini_results = [{"pos": i + 1, "val_after": ch, "confidence": 1.0} for i, ch in enumerate(raw_digits)]
+
+        print(f"\n[ขั้นตอนที่ 3.1] ⚖️ ตรวจสอบผลลัพธ์ของ Gemini ด้วย Rule-Base...")
+        g_valid, g_errors = step2_validate_rules(
+            gemini_results, min_conf=min_conf, current_reading=gemini_val, history=history, meter_type=meter_type
+        )
+
+        if g_valid:
+            score += 20  # Gemini กู้สำเร็จและผ่านทุกกฎ บวก 20 (รวมเป็น 120 หรือ 1120)
+            return {
+                "status": "APPROVED_GEMINI",
+                "reading": gemini_res["reading"],
+                "raw": raw_digits,
+                "reason": gemini_res.get("reason"),
+                "image_path": str(image_path),
+                "meter_type": meter_type,
+                "ocr_engine": score
+            }
+        else:
+            # Gemini ตอบมาแต่ไม่ผ่านกฎ (เช่น จำนวนหลักผิด หรือค่าลดลง) -> ส่งคนตรวจ
+            print(f"  • ผลตรวจ Gemini: ❌ ไม่ผ่านเกณฑ์ Rule-Base -> ส่งคนตรวจ")
+            score += 10  # Gemini กู้ไม่สำเร็จ บวก 10 (รวมเป็น 110 หรือ 1110)
+            return step4_escalate_to_human(
+                image_path,
+                local_errors=errors,
+                gemini_error="; ".join(g_errors),
+                ocr_engine=score
+            )
+    else:
+        score += 10  # Gemini กู้ไม่สำเร็จ บวก 10 (รวมเป็น 110 หรือ 1110)
+        return step4_escalate_to_human(
+            image_path,
+            local_errors=errors,
+            gemini_error=gemini_res.get("error"),
+            ocr_engine=score
+        )
 
 
 # ==========================================================
@@ -185,11 +233,15 @@ def run_multi_image_pipeline(image_paths: list, meter_type: str = "auto", expect
                 "raw": best_item["raw"],
                 "meter_type": meter_type,
                 "vote_ratio": f"{count}/{len(image_paths)}",
-                "selected_image": best_item["image_path"]
+                "selected_image": best_item["image_path"],
+                "ocr_engine": 0
             }
 
         # ถ้าคะแนนเสียงเท่ากัน ให้เลือกภาพที่ Confidence รวมสูงสุด
         best_conf_item = max(approved_locals, key=lambda x: x.get("confidence", 0.0))
+        best_conf_item["ocr_engine"] = 0
+        best_conf_item.setdefault("selected_image", best_conf_item.get("image_path"))
+        best_conf_item.setdefault("vote_ratio", f"1/{len(image_paths)}")
         print(f"\n🎉 [เลือกภาพที่ชัดที่สุด Highest Confidence] ได้ผลลัพธ์: {best_conf_item['reading']}")
         return best_conf_item
 
@@ -211,7 +263,8 @@ def run_multi_image_pipeline(image_paths: list, meter_type: str = "auto", expect
                 "reason": g_best_item.get("reason"),
                 "meter_type": meter_type,
                 "vote_ratio": f"{g_count}/{len(image_paths)}",
-                "selected_image": g_best_item["image_path"]
+                "selected_image": g_best_item["image_path"],
+                "ocr_engine": g_best_item.get("ocr_engine", 120)
             }
         else:
             print(f"\n⚠️ [Gemini Vision อ่านได้ผลไม่ตรงกัน ({g_count}/{len(image_paths)}) -> ส่งต่อให้คนตรวจ]")
@@ -220,15 +273,19 @@ def run_multi_image_pipeline(image_paths: list, meter_type: str = "auto", expect
     all_errs = []
     for r in all_results:
         all_errs.extend(r.get("local_errors", []))
+        if r.get("gemini_error"):
+            all_errs.append(r["gemini_error"])
     if not all_errs:
         all_errs = ["ภาพอ่านไม่ออกหรือไม่พบช่องตัวเลข"]
 
+    overall_engine = 1110 if (all_results and all(r.get("ocr_engine") == 1110 for r in all_results)) else 110
     print("\n🚩 [ทุกภาพไม่ผ่านเกณฑ์ -> ส่งต่อให้คนตรวจ]")
     return {
         "status": "HUMAN_REVIEW_REQUIRED",
         "meter_type": meter_type,
         "local_errors": all_errs,
-        "all_results": all_results
+        "all_results": all_results,
+        "ocr_engine": overall_engine
     }
 
 

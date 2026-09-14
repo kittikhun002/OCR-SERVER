@@ -239,10 +239,11 @@ def process_single_job(job: dict) -> None:
         reading_str = pipeline_output.get("reading", "")
 
         # ดึงตัวเลขพร้อมจุดทศนิยม
-        if reading_str:
-            digits_only = "".join(c for c in reading_str.split()[0] if c.isdigit() or c == ".")
+        reading_parts = reading_str.strip().split() if reading_str else []
+        if reading_parts:
+            digits_only = "".join(c for c in reading_parts[0] if c.isdigit() or c == ".")
         else:
-            digits_only = "".join(c for c in raw_str if c.isdigit() or c == ".")
+            digits_only = "".join(c for c in str(raw_str) if c.isdigit() or c == ".")
 
         # -------------------------------------------------------------------
         # 🏷️ แมป error_type:
@@ -260,7 +261,12 @@ def process_single_job(job: dict) -> None:
             try:
                 ocr_reading = float(digits_only)
             except ValueError:
-                ocr_reading = float(digits_only.replace(".", "", digits_only.count(".") - 1))
+                try:
+                    cleaned = digits_only.replace(".", "", digits_only.count(".") - 1)
+                    ocr_reading = float(cleaned)
+                except (ValueError, TypeError):
+                    error_type = 1
+                    ocr_reading = None
         else:
             # ❌ เกิดข้อผิดพลาด
             joined_errs = " ".join(local_errors).lower()
@@ -286,8 +292,8 @@ def process_single_job(job: dict) -> None:
         # --- Step 7: แยก Endpoint ส่งผลลัพธ์ (Submit Result by Flag) ---
         print(f"\n[Step 7] 📤 กำลังส่งผลลัพธ์กลับ Server...")
 
-        # ระบุว่าผลลัพธ์ได้รับการยืนยันโดยโมเดลใด (1 = LOCAL, 2 = GEMINI)
-        ocr_engine: int = 2 if status == "APPROVED_GEMINI" else 1
+        # ดึงค่า ocr_engine จาก Pipeline (Summation Score: 0, 120, 1120, 110, 1110)
+        ocr_engine: int = int(pipeline_output.get("ocr_engine", 0 if status == "APPROVED_LOCAL" else (120 if status == "APPROVED_GEMINI" else 110)))
 
         form_data = {
             "error_type": error_type,
@@ -307,9 +313,16 @@ def process_single_job(job: dict) -> None:
         submit_resp = _request("POST", target_endpoint, data=form_data)
         submit_resp.raise_for_status()
 
-        engine_name = "GEMINI" if ocr_engine == 2 else "LOCAL"
+        engine_desc = {
+            0: "Local AI ผ่านสมบูรณ์ (0)",
+            120: "Gemini กู้สำเร็จ - ตัวเลขเบลอ (120)",
+            1120: "Gemini กู้สำเร็จ - หากล่องไม่ครบ (1120)",
+            110: "ส่งคนตรวจ - อ่านเลขไม่ออก (110)",
+            1110: "ส่งคนตรวจ - หากล่องไม่พบ/ภาพมืด (1110)",
+        }.get(ocr_engine, f"Score {ocr_engine}")
+
         print(f"✅ งาน #{job_id} ({'Test' if is_test else 'Production'}) เสร็จสมบูรณ์!", flush=True)
-        print(f"   • ผลลัพธ์: error_type={error_type} | ocr_reading={ocr_reading} | ocr_engine={ocr_engine} ({engine_name})", flush=True)
+        print(f"   • ผลลัพธ์: error_type={error_type} | ocr_reading={ocr_reading} | ocr_engine={ocr_engine} ({engine_desc})", flush=True)
 
     except Exception as exc:
         print(f"❌ เกิดข้อผิดพลาดกับงาน #{job_id}: {exc}", flush=True)
