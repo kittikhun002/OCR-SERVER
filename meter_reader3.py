@@ -74,11 +74,17 @@ def is_red_roi(roi):
     return ((cv2.countNonZero(m1) + cv2.countNonZero(m2)) / float(roi.shape[0] * roi.shape[1])) > 0.10
 
 
+_CACHED_YOLO = None
+_CACHED_CNN = None
+
+
 def get_yolo_detections(image_path_or_img, conf=YOLO_CONFIDENCE, iou=YOLO_IOU):
     """Run YOLO and return detected digit bounding boxes (classes 0-9)."""
-    from ultralytics import YOLO
-    model = YOLO(YOLO_MODEL_PATH)
-    results = model(image_path_or_img, iou=iou, conf=conf, verbose=False)
+    global _CACHED_YOLO
+    if _CACHED_YOLO is None:
+        from ultralytics import YOLO
+        _CACHED_YOLO = YOLO(YOLO_MODEL_PATH)
+    results = _CACHED_YOLO(image_path_or_img, iou=iou, conf=conf, verbose=False)
     detections = []
 
     for r in results:
@@ -305,11 +311,13 @@ def read_meter(image_path, expected_digits=None, meter_type="auto"):
         print(f"ช่อง {r['pos']}: {cand}{red}")
 
     # 3. CNN Recognition
+    global _CACHED_CNN
     cnn_path = Path(CNN_MODEL_PATH) if Path(CNN_MODEL_PATH).exists() else Path(FALLBACK_CNN_PATH)
     cnn_preds = []
     if cnn_path.exists():
-        cnn = DigitCNN(cnn_path)
-        cnn_preds = [cnn.predict(r["crop"]) for r in rois]
+        if _CACHED_CNN is None:
+            _CACHED_CNN = DigitCNN(cnn_path)
+        cnn_preds = [_CACHED_CNN.predict(r["crop"]) for r in rois]
     else:
         cnn_preds = [{}] * len(rois)
 

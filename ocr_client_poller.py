@@ -194,7 +194,7 @@ def fetch_meter_history(meter_id: str) -> list[float]:
 def process_single_job(job: dict) -> None:
     job_id = job["id"]
     original_filename = str(job.get("original_filename", ""))
-    meter_id = job.get("meter_id") or original_filename[:4]
+    meter_id = job.get("meter_id") or Path(original_filename).stem
 
     print(f"\n{'='*65}")
     print(f"🔍 [กำลังประมวลผล] งาน #{job_id} | มิเตอร์: '{meter_id}' | ไฟล์: '{original_filename}'")
@@ -220,7 +220,9 @@ def process_single_job(job: dict) -> None:
         history = fetch_meter_history(meter_id)
 
     # ตรวจจับประเภทมิเตอร์ (elec, water, gas)
-    meter_type = detect_meter_type(original_filename or meter_id)
+    meter_type = detect_meter_type(original_filename)
+    if meter_type == "auto" and meter_id:
+        meter_type = detect_meter_type(meter_id)
 
     try:
         # --- Step 6: ประมวลผลภาพด้วย AI (Run OCR Pipeline + Majority Vote) ---
@@ -295,12 +297,24 @@ def process_single_job(job: dict) -> None:
         # ดึงค่า ocr_engine จาก Pipeline (Summation Score: 0, 120, 1120, 110, 1110)
         ocr_engine: int = int(pipeline_output.get("ocr_engine", 0 if status == "APPROVED_LOCAL" else (120 if status == "APPROVED_GEMINI" else 110)))
 
+        # ดึงค่า confidence จาก Pipeline (แปลงเป็นสเกล 0-100 float ตามข้อกำหนด Server)
+        conf_raw = pipeline_output.get("confidence")
+        confidence_pct: float | None = None
+        if conf_raw is not None:
+            c = float(conf_raw)
+            if c <= 1.0:
+                c *= 100.0
+            confidence_pct = round(max(0.0, min(100.0, c)), 2)
+
         form_data = {
             "error_type": error_type,
             "ocr_engine": ocr_engine,
         }
-        if ocr_reading is not None and error_type in (0, 3):
+        # ocr_reading ต้องเป็นค่า >= 0 ตามข้อกำหนด Server (กรณี error_type 0, 3)
+        if ocr_reading is not None and ocr_reading >= 0 and error_type in (0, 3):
             form_data["ocr_reading"] = ocr_reading
+            if confidence_pct is not None:
+                form_data["confidence"] = confidence_pct
 
         # เลือก Endpoint ปลายทางตามสถานะ is_test
         if is_test:
@@ -321,8 +335,9 @@ def process_single_job(job: dict) -> None:
             1110: "ส่งคนตรวจ - หากล่องไม่พบ/ภาพมืด (1110)",
         }.get(ocr_engine, f"Score {ocr_engine}")
 
+        conf_log = f" | confidence={form_data['confidence']}%" if "confidence" in form_data else ""
         print(f"✅ งาน #{job_id} ({'Test' if is_test else 'Production'}) เสร็จสมบูรณ์!", flush=True)
-        print(f"   • ผลลัพธ์: error_type={error_type} | ocr_reading={ocr_reading} | ocr_engine={ocr_engine} ({engine_desc})", flush=True)
+        print(f"   • ผลลัพธ์: error_type={error_type} | ocr_reading={ocr_reading} | ocr_engine={ocr_engine} ({engine_desc}){conf_log}", flush=True)
 
     except Exception as exc:
         print(f"❌ เกิดข้อผิดพลาดกับงาน #{job_id}: {exc}", flush=True)

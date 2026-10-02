@@ -34,11 +34,11 @@ def detect_meter_type(filename_or_path: str) -> str:
     - g100_... -> gas (มิเตอร์แก๊ส)
     """
     name = Path(filename_or_path).name.lower()
-    if name.startswith("e"):
+    if name.startswith(("ele", "e")):
         return "elec"
-    elif name.startswith("w"):
+    elif name.startswith(("wat", "w")):
         return "water"
-    elif name.startswith("g"):
+    elif name.startswith(("gas", "g")):
         return "gas"
     return "auto"
 
@@ -169,6 +169,7 @@ def run_pipeline(image_path: str, meter_type: str = "auto", expected_digits: int
                 "reason": gemini_res.get("reason"),
                 "image_path": str(image_path),
                 "meter_type": meter_type,
+                "confidence": 0.95,
                 "ocr_engine": score
             }
         else:
@@ -234,6 +235,7 @@ def run_multi_image_pipeline(image_paths: list, meter_type: str = "auto", expect
                 "meter_type": meter_type,
                 "vote_ratio": f"{count}/{len(image_paths)}",
                 "selected_image": best_item["image_path"],
+                "confidence": best_item.get("confidence", 0.0),
                 "ocr_engine": 0
             }
 
@@ -264,6 +266,7 @@ def run_multi_image_pipeline(image_paths: list, meter_type: str = "auto", expect
                 "meter_type": meter_type,
                 "vote_ratio": f"{g_count}/{len(image_paths)}",
                 "selected_image": g_best_item["image_path"],
+                "confidence": g_best_item.get("confidence", 0.95),
                 "ocr_engine": g_best_item.get("ocr_engine", 120)
             }
         else:
