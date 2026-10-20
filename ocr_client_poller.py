@@ -312,7 +312,7 @@ def process_single_job(job: dict) -> None:
         }
         # ocr_reading ต้องเป็นค่า >= 0 ตามข้อกำหนด Server (กรณี error_type 0, 3)
         if ocr_reading is not None and ocr_reading >= 0 and error_type in (0, 3):
-            form_data["ocr_reading"] = ocr_reading
+            form_data["ocr_reading"] = digits_only
             if confidence_pct is not None:
                 form_data["confidence"] = confidence_pct
 
@@ -336,8 +336,9 @@ def process_single_job(job: dict) -> None:
         }.get(ocr_engine, f"Score {ocr_engine}")
 
         conf_log = f" | confidence={form_data['confidence']}%" if "confidence" in form_data else ""
+        sent_reading = form_data.get("ocr_reading", "-")
         print(f"✅ งาน #{job_id} ({'Test' if is_test else 'Production'}) เสร็จสมบูรณ์!", flush=True)
-        print(f"   • ผลลัพธ์: error_type={error_type} | ocr_reading={ocr_reading} | ocr_engine={ocr_engine} ({engine_desc}){conf_log}", flush=True)
+        print(f"   • ผลลัพธ์: error_type={error_type} | ocr_reading={sent_reading} | ocr_engine={ocr_engine} ({engine_desc}){conf_log}", flush=True)
 
     except Exception as exc:
         print(f"❌ เกิดข้อผิดพลาดกับงาน #{job_id}: {exc}", flush=True)
