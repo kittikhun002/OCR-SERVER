@@ -237,8 +237,8 @@ def process_single_job(job: dict) -> None:
 
         status = pipeline_output.get("status")
         local_errors = pipeline_output.get("local_errors", [])
-        raw_str = pipeline_output.get("raw", "0")
-        reading_str = pipeline_output.get("reading", "")
+        raw_str = pipeline_output.get("raw") or ""
+        reading_str = pipeline_output.get("reading") or ""
 
         # ดึงตัวเลขพร้อมจุดทศนิยม
         reading_parts = reading_str.strip().split() if reading_str else []

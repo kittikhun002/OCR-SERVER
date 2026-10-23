@@ -89,11 +89,13 @@ def step3_verify_with_gemini(image_path: str, errors: list, gemini_key: str = No
 # ==========================================================
 # 🔹 ขั้นตอนที่ 4: ส่งต่อให้เจ้าหน้าที่ตรวจสอบ (Human Review)
 # ==========================================================
-def step4_escalate_to_human(image_path: str, local_errors: list, gemini_error: str = None, ocr_engine: int = 110):
+def step4_escalate_to_human(image_path: str, local_errors: list, gemini_error: str = None, ocr_engine: int = 110, reading: str = None, raw: str = None):
     print(f"\n[ขั้นตอนที่ 4] 🚩 ส่งต่อให้เจ้าหน้าที่ตรวจสอบ (Human Review Required)")
     return {
         "status": "HUMAN_REVIEW_REQUIRED",
         "image_path": str(image_path),
+        "reading": reading,
+        "raw": raw,
         "local_errors": local_errors,
         "gemini_error": gemini_error,
         "ocr_engine": ocr_engine
@@ -180,7 +182,9 @@ def run_pipeline(image_path: str, meter_type: str = "auto", expected_digits: int
                 image_path,
                 local_errors=errors,
                 gemini_error="; ".join(g_errors),
-                ocr_engine=score
+                ocr_engine=score,
+                reading=gemini_res.get("reading") or formatted.get("fmt_a"),
+                raw=raw_digits or formatted.get("raw_a")
             )
     else:
         score += 10  # Gemini กู้ไม่สำเร็จ บวก 10 (รวมเป็น 110 หรือ 1110)
@@ -188,7 +192,9 @@ def run_pipeline(image_path: str, meter_type: str = "auto", expected_digits: int
             image_path,
             local_errors=errors,
             gemini_error=gemini_res.get("error"),
-            ocr_engine=score
+            ocr_engine=score,
+            reading=formatted.get("fmt_a"),
+            raw=formatted.get("raw_a")
         )
 
 
@@ -282,10 +288,15 @@ def run_multi_image_pipeline(image_paths: list, meter_type: str = "auto", expect
         all_errs = ["ภาพอ่านไม่ออกหรือไม่พบช่องตัวเลข"]
 
     overall_engine = 1110 if (all_results and all(r.get("ocr_engine") == 1110 for r in all_results)) else 110
+    # แนบตัวเลขที่ AI อ่านได้ไปด้วย เพื่อไม่ให้กลายเป็น 0
+    best_candidate = next((r for r in all_results if r.get("raw")), {})
+
     print("\n🚩 [ทุกภาพไม่ผ่านเกณฑ์ -> ส่งต่อให้คนตรวจ]")
     return {
         "status": "HUMAN_REVIEW_REQUIRED",
         "meter_type": meter_type,
+        "reading": best_candidate.get("reading", ""),
+        "raw": best_candidate.get("raw", ""),
         "local_errors": all_errs,
         "all_results": all_results,
         "ocr_engine": overall_engine
