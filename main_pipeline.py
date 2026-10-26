@@ -89,13 +89,14 @@ def step3_verify_with_gemini(image_path: str, errors: list, gemini_key: str = No
 # ==========================================================
 # 🔹 ขั้นตอนที่ 4: ส่งต่อให้เจ้าหน้าที่ตรวจสอบ (Human Review)
 # ==========================================================
-def step4_escalate_to_human(image_path: str, local_errors: list, gemini_error: str = None, ocr_engine: int = 110, reading: str = None, raw: str = None):
+def step4_escalate_to_human(image_path: str, local_errors: list, gemini_error: str = None, ocr_engine: int = 110, reading: str = None, raw: str = None, confidence: float = None):
     print(f"\n[ขั้นตอนที่ 4] 🚩 ส่งต่อให้เจ้าหน้าที่ตรวจสอบ (Human Review Required)")
     return {
         "status": "HUMAN_REVIEW_REQUIRED",
         "image_path": str(image_path),
         "reading": reading,
         "raw": raw,
+        "confidence": confidence,
         "local_errors": local_errors,
         "gemini_error": gemini_error,
         "ocr_engine": ocr_engine
@@ -184,7 +185,8 @@ def run_pipeline(image_path: str, meter_type: str = "auto", expected_digits: int
                 gemini_error="; ".join(g_errors),
                 ocr_engine=score,
                 reading=gemini_res.get("reading") or formatted.get("fmt_a"),
-                raw=raw_digits or formatted.get("raw_a")
+                raw=raw_digits or formatted.get("raw_a"),
+                confidence=0.95 if gemini_res.get("reading") else (sum(r["confidence"] for r in results) / len(results) if results else 0.0)
             )
     else:
         score += 10  # Gemini กู้ไม่สำเร็จ บวก 10 (รวมเป็น 110 หรือ 1110)
@@ -194,7 +196,8 @@ def run_pipeline(image_path: str, meter_type: str = "auto", expected_digits: int
             gemini_error=gemini_res.get("error"),
             ocr_engine=score,
             reading=formatted.get("fmt_a"),
-            raw=formatted.get("raw_a")
+            raw=formatted.get("raw_a"),
+            confidence=sum(r["confidence"] for r in results) / len(results) if results else 0.0
         )
 
 
@@ -297,6 +300,7 @@ def run_multi_image_pipeline(image_paths: list, meter_type: str = "auto", expect
         "meter_type": meter_type,
         "reading": best_candidate.get("reading", ""),
         "raw": best_candidate.get("raw", ""),
+        "confidence": best_candidate.get("confidence"),
         "local_errors": all_errs,
         "all_results": all_results,
         "ocr_engine": overall_engine
