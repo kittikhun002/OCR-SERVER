@@ -34,7 +34,8 @@ Our automated computer vision system tried to read this meter image, but encount
 
 Please carefully inspect all meter dials/wheels from left to right:
 1. Read every single digit wheel, including both black (integer) wheels and red (decimal/fractional) wheels.
-2. Return ONLY valid JSON format without markdown code blocks.
+2. CRITICAL: DO NOT OMIT LEADING ZEROS. For example, if dials show 0, 0, 3, 3 and red dial 2, output "0033.2" (keep the "00"). Never shorten "0033.2" to "33.2".
+3. Return ONLY valid JSON format without markdown code blocks.
 
 Format:
 {{

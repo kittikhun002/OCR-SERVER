@@ -233,6 +233,7 @@ def process_single_job(job: dict) -> None:
             meter_type=meter_type,
             history=history,
             gemini_key=GEMINI_API_KEY,
+            is_test=is_test,
         )
 
         status = pipeline_output.get("status")

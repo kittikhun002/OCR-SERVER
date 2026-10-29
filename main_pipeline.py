@@ -106,7 +106,7 @@ def step4_escalate_to_human(image_path: str, local_errors: list, gemini_error: s
 # ==========================================================
 # 🚀 ประมวลผลภาพเดี่ยว (Single Image)
 # ==========================================================
-def run_pipeline(image_path: str, meter_type: str = "auto", expected_digits: int = None, min_conf: float = 0.60, history: list = None, gemini_key: str = None):
+def run_pipeline(image_path: str, meter_type: str = "auto", expected_digits: int = None, min_conf: float = 0.60, history: list = None, gemini_key: str = None, is_test: bool = False):
     # ออโต้ดีเทคประเภทมิเตอร์ถ้าไม่ได้ระบุมา
     if meter_type == "auto":
         meter_type = detect_meter_type(image_path)
@@ -135,6 +135,12 @@ def run_pipeline(image_path: str, meter_type: str = "auto", expected_digits: int
     is_valid, errors = step2_validate_rules(results, min_conf=min_conf, current_reading=raw_val, history=history, meter_type=meter_type)
     if not is_valid:
         score += 100  # ตัวเลขอ่านไม่ออก / เบลอ / Rule ไม่ผ่าน บวก 100
+
+    # 🌟 ถ้าเป็นงานจริงที่ยังไม่มีประวัติ (Day 0 Baseline) -> ให้ Gemini ช่วยอ่านเพื่อตั้งค่าเริ่มต้น
+    if not history and not is_test and gemini_key:
+        score += 100
+        if not errors:
+            errors = ["[Day 0 Baseline] มิเตอร์ใหม่ยังไม่มีประวัติ ให้ Gemini อ่านเพื่อตั้งค่าเริ่มต้น"]
 
     # กรณี Local AI ผ่านฉลุยทั้ง 2 ด่าน (score ยังคงเป็น 0)
     if score == 0:
@@ -204,7 +210,7 @@ def run_pipeline(image_path: str, meter_type: str = "auto", expected_digits: int
 # ==========================================================
 # 🗳️ ประมวลผลชุดภาพ (ESP32 ถ่าย 3 ภาพ ➔ 1 คำตอบ)
 # ==========================================================
-def run_multi_image_pipeline(image_paths: list, meter_type: str = "auto", expected_digits: int = None, min_conf: float = 0.60, history: list = None, gemini_key: str = None):
+def run_multi_image_pipeline(image_paths: list, meter_type: str = "auto", expected_digits: int = None, min_conf: float = 0.60, history: list = None, gemini_key: str = None, is_test: bool = False):
     """
     รับลิสต์ภาพ 3 ภาพ (เช่น จาก ESP32) -> อ่านทุกภาพ -> โหวตเสียงส่วนใหญ่เหลือ 1 คำตอบ
     """
@@ -222,7 +228,7 @@ def run_multi_image_pipeline(image_paths: list, meter_type: str = "auto", expect
 
     all_results = []
     for img_p in image_paths:
-        res = run_pipeline(img_p, meter_type=meter_type, expected_digits=expected_digits, min_conf=min_conf, history=history, gemini_key=gemini_key)
+        res = run_pipeline(img_p, meter_type=meter_type, expected_digits=expected_digits, min_conf=min_conf, history=history, gemini_key=gemini_key, is_test=is_test)
         all_results.append(res)
 
     # 1. กรองเฉพาะภาพที่ Local AI อ่านผ่าน
