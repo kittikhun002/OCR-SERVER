@@ -1,6 +1,6 @@
 # ⚡ Smart Utility Meter OCR System
 
-ระบบอ่านและตรวจสอบตัวเลขมิเตอร์สาธารณูปโภคอัตโนมัติ (ไฟฟ้า, น้ำ, แก๊ส) ด้วยการผสมผสานสถาปัตยกรรม **Multi-Stage AI** (Local Edge AI + Rule-Base Validation + Cloud Vision AI) พร้อมระบบ Worker ดึงคิวงานประมวลผลอัตโนมัติ (OCR Client Poller)
+ระบบอ่านและตรวจสอบตัวเลขมิเตอร์สาธารณูปโภคอัตโนมัติ (ไฟฟ้า, น้ำ, แก๊ส) ด้วยสถาปัตยกรรม **Multi-Stage AI** (Local Edge AI + Rule-Base Validation + Cloud Vision AI) พร้อมระบบ Worker ดึงคิวงานประมวลผลอัตโนมัติ (OCR Client Poller)
 
 ---
 
@@ -53,13 +53,104 @@ flowchart TD
 
 ---
 
+## 💻 ข้อกำหนดของระบบและเวอร์ชันที่รองรับ (Environment & Tech Stack)
+
+สำหรับผู้พัฒนาหรือผู้ดูแลระบบที่มารับช่วงต่อ โปรดตรวจสอบสภาพแวดล้อมดังนี้:
+
+| รายการ | รายละเอียด | หมายเหตุ |
+| :--- | :--- | :--- |
+| **Python Version** | **Python 3.10 – 3.12** *(แนะนำอย่างยิ่ง)* | Docker บน Production ใช้ `python:3.11-slim`<br>*(บน macOS รองรับ 3.10 - 3.14)* |
+| **OS / Platform** | Linux (Ubuntu 20.04+, Debian 11+), macOS (Apple Silicon / Intel), Windows 10/11 | บน Linux จำเป็นต้องมีไลบรารี GUI เบื้องต้น (`libgl1`, `libglib2.0-0`) |
+| **AI Models** | 1. **YOLO Detection:** `best.pt` (สกัดตำแหน่งกล่องล้อตัวเลข ROI)<br>2. **CNN TFLite:** `dig-class100-*.tflite` (จำแนกเลข 0-9 และทิศทางการหมุน)<br>3. **Gemini Vision:** `gemini-3.5-flash-lite` หรือ `gemini-2.5-flash` | โมเดล Local รันบน CPU ได้อย่างรวดเร็ว ไม่จำเป็นต้องใช้ GPU การ์ดจอแรง |
+
+---
+
+## 📦 รายการไลบรารีทั้งหมด (Libraries & Dependencies)
+
+ตารางสรุปหน้าที่ของ Library แต่ละตัวที่อยู่ในระบบ:
+
+| Library Name | หน้าที่การทำงาน | ทำไมต้องใช้ตัวนี้? |
+| :--- | :--- | :--- |
+| **`ultralytics`** | รัน Object Detection โมเดล `best.pt` | ค้นหากล่องล้อตัวเลขมิเตอร์ (Bounding Box) และพิกัด ROI |
+| **`ai-edge-litert`** | รันโมเดล TensorFlow Lite (`.tflite`) บน CPU | เป็น Runtime ทางการใหม่ของ Google สำหรับ TFLite เบา เร็วมาก และไม่กิน RAM |
+| **`opencv-python-headless`** | ประมวลผลภาพ (Image Preprocessing, Crop, Resize) | รุ่น `headless` เหมาะกับ Server/Docker เพราะไม่ดึงไลบรารีจอแสดงผล GUI ที่ไม่จำเป็น |
+| **`pillow`** | เปิด ปรับแต่ง และแปลง Format ไฟล์ภาพ | จัดการภาพก่อนส่งให้โมเดล AI และ Gemini |
+| **`numpy`** | จัดการ Array ตัวเลขและ Matrix พิกเซลของภาพ | ตัวแปลงข้อมูลพื้นฐานระหว่าง OpenCV และโมเดล AI |
+| **`httpx`** | HTTP Client สำหรับคุยกับ Image Store Server | รองรับ HTTP/2, Connection Pooling, และมี Timeout จัดการที่ดี |
+| **`python-dotenv`** | โหลดค่า Environment Variable จากไฟล์ `.env` | แยก Secret Key (เช่น API Key) ออกจากโค้ดเพื่อความปลอดภัย |
+| **`google-genai`** หรือ<br>**`google-generativeai`** | เรียกใช้ Gemini Vision API (Multimodal AI) | เชื่อมต่อโมเดล Gemini ทำหน้าที่เป็น Fallback เมื่อภาพไม่ชัด |
+
+### 🛠️ คำสั่งติดตั้งทั้งหมด (Installation Commands)
+
+#### 1. ติดตั้ง System Dependencies (เฉพาะบน Linux / Ubuntu / Debian)
+```bash
+sudo apt-get update && sudo apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglib2.0-0 \
+    curl \
+    git
+```
+
+#### 2. คำสั่งติดตั้ง Python Packages ทั้งหมดแบบบรรทัดเดียว
+```bash
+pip install ultralytics opencv-python-headless ai-edge-litert httpx python-dotenv pillow numpy google-genai
+```
+*(หรือติดตั้งผ่านไฟล์: `pip install -r requirements.txt`)*
+
+---
+
+## 🧠 ข้อมูลเชิงลึกสำหรับผู้ดูแลระบบและนักพัฒนา (Deep Dive Developer Guide)
+
+เพื่อให้ผู้ที่จะมาพัฒนาต่อหรือ Maintenance สามารถแก้ไขโค้ดได้อย่างมั่นใจ:
+
+### 1. การทำงานของ `meter_reader3.py` (Local AI Engine)
+* **โมเดล YOLO (`best.pt`):** ตรวจจับตำแหน่งตัวเลข จะได้ Bounding Box $N$ กล่อง
+* **การเรียงลำดับตำแหน่ง:** ทำการ Sort กล่องตัวเลขจาก **ซ้ายไปขวา (ตามแนวแกน X)**
+* **CNN Classification (`.tflite`):** ครอปภาพเฉพาะในกล่องแล้วส่งเข้า TFLite
+  * โมเดลจะจำแนกออกมาเป็นคลาสละเอียด (Class 0–99)
+  * เลขคู่/เลขคี่และช่วงทศนิยมบอกได้ว่า **ตัวเลขกำลังหมุนอยู่ระหว่างเลขอะไร** (เช่น `5 -> 6` คือกำลังเปลี่ยนผ่าน)
+* **Mechanical Gear Consistency:** หากล้อหลักหน่วยกำลังหมุนผ่านเลข 9 สู่เลข 0 ล้อหลักสิบจะต้องเริ่มขยับตาม ถ้าไม่ขยับจะถูกดักจับว่าเป็นอาการล้อค้างหรืออ่านเพี้ยน
+
+### 2. การทำงานของ Rule-Base ใน `meter_validator.py`
+* **Rule 1 (Format & Digit Completeness):**
+  * `elec`: บังคับ 5 หลัก
+  * `water`: ยอมรับ 4, 5, 7, 8 หลัก (ถ้า 4 หลัก ต้องไม่มีล้อแดงปน)
+  * `gas`: บังคับ 8 หลัก
+* **Rule 2 (Non-Decreasing):** ค่าอ่านได้ปัจจุบัน $\ge$ ค่าเดือนล่าสุด (`history[-1]`) ถ้าค่าน้อยกว่าจะส่งแจ้งเตือนว่า *"ค่ามิเตอร์ถอยหลังไม่ได้"*
+* **Rule 3 (Usage Spike Anomaly):** คำนวณหน่วยที่ใช้เฉลี่ย 3 เดือนล่าสุด หากเดือนนี้ใช้พุ่งเกิน **3 เท่า** ของค่าเฉลี่ย จะถูกส่งเข้าคิวคนตรวจเพื่อยืนยันว่าท่อรั่ว/ไฟรั่ว หรือ AI อ่านผิด
+
+### 3. กลไก Day 0 Baseline Guard ใน `main_pipeline.py`
+* **ปัญหาเดิม:** ถ้ารูปแรกของมิเตอร์ไม่มีประวัติ แล้ว YOLO อ่านผิดไป 1 ตัว ค่าผิดนั้นจะกลายเป็นประวัติค้ำคอ ทำให้เดือนถัดไปตก Rule 2 ตลอดกาล
+* **วิธีแก้:** ถ้า `not history and not is_test` ระบบจะบังคับใช้เกณฑ์ความมั่นใจเข้มงวดขึ้นเป็น **$\ge 0.80$**
+  * ถ้ารูปชัดเป๊ะ ($\ge 0.80$ ทุกตัว): อนุมัติทันที (`APPROVED_LOCAL`, score = 0)
+  * ถ้ามีตัวก้ำกึ่ง ($< 0.80$): ดีดเข้า Stage 3 ให้ Gemini ช่วยอ่านทันที
+* **รูปแบบคำตอบจาก Gemini:** ถูกบังคับใน Prompt ให้ส่งตัวเลขต่อเนื่องล้วนๆ **ห้ามมีจุดทศนิยม และห้ามตัดเลขศูนย์นำหน้า** (เช่น `00332` ห้ามตอบ `33.2`)
+
+### 4. วงรอบการทำงานของ Poller Worker (`ocr_client_poller.py`)
+```text
+[Loop ทุก 10 วิ] ➔ GET /admin/images/ocr (Poll หางานที่ job_status=queued)
+       ↓
+[POST Claim Job] ➔ ยืนยันรับงานมาทำ (ป้องกัน Worker ตัวอื่นแย่งงาน)
+       ↓
+[GET Image Files] ➔ ดาวน์โหลดภาพมิเตอร์ 1-3 ภาพเก็บในหน่วยความจำ/ดิสก์ชั่วคราว
+       ↓
+[GET History] ➔ ดึงประวัติ 3 เดือนล่าสุดผ่าน GET /admin/meters/{meter_id}/ocr-readings
+       ↓
+[Run Pipeline] ➔ สั่ง main_pipeline.py ประมวลผล (Local AI ➔ Rule-Base ➔ Gemini)
+       ↓
+[POST Result] ➔ ส่งผลลัพธ์: ocr_reading, raw_reading, confidence, error_type, ocr_engine
+```
+
+---
+
 ## 📁 โครงสร้างโปรเจกต์ (Project Structure)
 
 ```text
 ├── best.pt                       # โมเดล YOLOv8/v11 ตรวจจับช่องตัวเลขมิเตอร์
 ├── dig-class100-*.tflite         # โมเดล CNN จำแนกตัวเลขและสถานะการหมุนของเฟือง
 ├── main_pipeline.py              # ตัวขับเคลื่อนหลัก Multi-Stage Pipeline & Majority Vote
-├── meter_validator.py            # Rule-Base Engine ตรวจสอบ 3 กฎเหล็ก
+├── meter_reader3.py              # เอนจิน Local AI (YOLO Cropping + TFLite Inference)
+├── meter_validator.py            # Rule-Base Engine ตรวจสอบ 3 กฎเหล็กอุตสาหกรรม
 ├── gemini_verifier.py            # ตัวเชื่อมต่อ Gemini Vision API (Google GenAI)
 ├── ocr_client_poller.py          # Worker ดึงคิวงานจาก Image Store Server ผ่าน REST API
 ├── Dockerfile                    # Docker Image build configuration
@@ -74,27 +165,20 @@ flowchart TD
 
 ### 1. ติดตั้งแบบ Local Environment
 
-#### ความต้องการขั้นต่ำ:
-- Python 3.10 ขึ้นไป
-- ติดตั้งไลบรารีระบบ: `libgl1`, `libglib2.0-0`
-
 ```bash
-# โคลน Repository
+# 1. โคลน Repository
 git clone https://github.com/kittikhun002/OCR-SERVER.git
 cd OCR-SERVER
 
-# สร้างและเปิดใช้งาน Virtual Environment
+# 2. สร้างและเปิดใช้งาน Virtual Environment (แนะนำ Python 3.10 - 3.12)
 python3 -m venv venv
 source venv/bin/activate  # บน Windows: venv\Scripts\activate
 
-# ติดตั้ง Dependencies
+# 3. ติดตั้ง Dependencies ทั้งหมด
 pip install --upgrade pip
 pip install -r requirements.txt
-```
 
-#### การตั้งค่าสภาพแวดล้อม (`.env`):
-คัดลอกไฟล์ตัวอย่างและแก้ไขค่า:
-```bash
+# 4. ตั้งค่า Environment Variables
 cp .env.example .env
 ```
 
