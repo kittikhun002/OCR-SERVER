@@ -1,4 +1,4 @@
-# ⚡ Smart Utility Meter OCR System
+# OCR System
 
 ระบบอ่านและตรวจสอบตัวเลขมิเตอร์สาธารณูปโภคอัตโนมัติ (ไฟฟ้า, น้ำ, แก๊ส) ด้วยสถาปัตยกรรม **Multi-Stage AI** (Local Edge AI + Rule-Base Validation + Cloud Vision AI) พร้อมระบบ Worker ดึงคิวงานประมวลผลอัตโนมัติ (OCR Client Poller)
 
