@@ -141,6 +141,21 @@ pip install ultralytics opencv-python-headless ai-edge-litert httpx python-doten
 [POST Result] ➔ ส่งผลลัพธ์: ocr_reading, raw_reading, confidence, error_type, ocr_engine
 ```
 
+### 5. แผนที่การแก้ไขโค้ด: อยากปรับแต่งส่วนไหน ต้องแก้ที่ไฟล์และฟังก์ชันอะไร? (Function Modification Map)
+
+หากต้องการปรับแต่งพฤติกรรมของระบบในอนาคต สามารถดูจุดแก้ไขได้ตามตารางนี้:
+
+| ความต้องการในการปรับแต่ง | ไฟล์เป้าหมาย | ฟังก์ชัน / ตัวแปรที่ต้องแก้ | คำแนะนำในการแก้ |
+| :--- | :--- | :--- | :--- |
+| **ปรับเกณฑ์ความมั่นใจวันแรก (Day 0 Baseline)** | `main_pipeline.py` | `run_pipeline()`<br>*(บรรทัด ~136)* | แก้ค่าตัวเลข `0.80` ในบรรทัด:<br>`check_conf = max(0.80, min_conf) if (not history and not is_test) else min_conf`<br>*(ถ้าต้องการผ่อนปรนให้ลดเป็น `0.75` หรือถ้าต้องการให้เข้มงวดขึ้นให้ปรับเป็น `0.85`)* |
+| **ปรับเกณฑ์ความมั่นใจขั้นต่ำปกติ (Confidence Threshold)** | `main_pipeline.py`<br>`meter_validator.py` | `min_conf: float = 0.60`<br>ใน parameter ฟังก์ชัน | ปรับค่าเริ่มต้น `min_conf` จาก `0.60` เป็นค่าอื่นตามต้องการ |
+| **ปรับสเปกจำนวนหลักของมิเตอร์แต่ละชนิด** | `meter_validator.py` | `VALID_DIGIT_COUNTS`<br>*(บรรทัด ~18-22)* | เพิ่ม/ลดจำนวนหลักที่ยอมรับได้ เช่น:<br>`VALID_DIGIT_COUNTS = {"elec": {5}, "gas": {8}, "water": {4, 5, 7, 8}}` |
+| **ปรับเกณฑ์ตรวจอัตราการใช้พุ่งผิดปกติ (Rule 3)** | `meter_validator.py` | `USAGE_SPIKE_MULTIPLIER`<br>*(บรรทัด ~89)* | แก้ตัวคูณเพดานการใช้ (ค่าเริ่มต้นคือ `3.0` เท่าของค่าเฉลี่ย 3 เดือน) สามารถตั้งผ่าน `.env` หรือแก้ในโค้ดตรงนี้ |
+| **ปรับปรุงคำสั่ง Prompt หรือสกัดคำตอบของ Gemini** | `gemini_verifier.py` | `verify_with_gemini()`<br>*(บรรทัด ~31-45)* | แก้ไขข้อความในตัวแปร `prompt`<br>*(ข้อสำคัญ: ต้องคงกฎ `CRITICAL: DO NOT INSERT ANY DOTS` และ `DO NOT OMIT LEADING ZEROS` ไว้เสมอ)* |
+| **ปรับอัลกอริทึม Majority Vote ของชุดภาพ ESP32** | `main_pipeline.py` | `run_multi_image_pipeline()`<br>*(บรรทัด ~235-265)* | ปรับเกณฑ์การตัดสิน เช่น ปัจจุบันใช้เสียงโหวต $\ge 2$ ใน 3 รูป หากต้องการเปลี่ยนเป็นอย่างอื่นสามารถแก้ที่ตัวแปร `vote_counts` |
+| **ปรับการทำงานของ Worker (รอบการ Poll / การส่งผลลัพธ์)** | `ocr_client_poller.py` | `process_single_job()`<br>*(บรรทัด ~200-350)* | จุดที่ส่งผลลัพธ์กลับ Server (`API_SUBMIT_RESULT` หรือ `API_SUBMIT_RESULT_TEST`) และการแปลงค่าก่อนส่ง |
+| **เปลี่ยนโมเดล YOLO หรือโมเดล CNN TFLite** | `meter_reader3.py` | `YOLO_WEIGHTS`<br>`TFLITE_MODEL_PATH` | ระบุ Path ไปยังไฟล์น้ำหนักโมเดลใหม่ (`.pt` หรือ `.tflite`) |
+
 ---
 
 ## 📁 โครงสร้างโปรเจกต์ (Project Structure)
