@@ -39,7 +39,7 @@ flowchart TD
 
 ---
 
-## 📊 รหัสเครื่องยนต์และสถานะผลลัพธ์ (`ocr_engine`)
+## 📊 รหัสการทำงานและสถานะผลลัพธ์ (`ocr_engine`)
 
 ระบบใช้การคำนวณคะแนนสะสมแบบ **Summation Score** เพื่อบอกที่มาของการอ่านผลลัพธ์ได้อย่างแม่นยำ:
 
@@ -69,16 +69,16 @@ flowchart TD
 
 ตารางสรุปหน้าที่ของ Library แต่ละตัวที่อยู่ในระบบ:
 
-| Library Name | หน้าที่การทำงาน | ทำไมต้องใช้ตัวนี้? |
-| :--- | :--- | :--- |
-| **`ultralytics`** | รัน Object Detection โมเดล `best.pt` | ค้นหากล่องล้อตัวเลขมิเตอร์ (Bounding Box) และพิกัด ROI |
-| **`ai-edge-litert`** | รันโมเดล TensorFlow Lite (`.tflite`) บน CPU | เป็น Runtime ทางการใหม่ของ Google สำหรับ TFLite เบา เร็วมาก และไม่กิน RAM |
-| **`opencv-python-headless`** | ประมวลผลภาพ (Image Preprocessing, Crop, Resize) | รุ่น `headless` เหมาะกับ Server/Docker เพราะไม่ดึงไลบรารีจอแสดงผล GUI ที่ไม่จำเป็น |
-| **`pillow`** | เปิด ปรับแต่ง และแปลง Format ไฟล์ภาพ | จัดการภาพก่อนส่งให้โมเดล AI และ Gemini |
-| **`numpy`** | จัดการ Array ตัวเลขและ Matrix พิกเซลของภาพ | ตัวแปลงข้อมูลพื้นฐานระหว่าง OpenCV และโมเดล AI |
-| **`httpx`** | HTTP Client สำหรับคุยกับ Image Store Server | รองรับ HTTP/2, Connection Pooling, และมี Timeout จัดการที่ดี |
-| **`python-dotenv`** | โหลดค่า Environment Variable จากไฟล์ `.env` | แยก Secret Key (เช่น API Key) ออกจากโค้ดเพื่อความปลอดภัย |
-| **`google-genai`** หรือ<br>**`google-generativeai`** | เรียกใช้ Gemini Vision API (Multimodal AI) | เชื่อมต่อโมเดล Gemini ทำหน้าที่เป็น Fallback เมื่อภาพไม่ชัด |
+| Library Name | หน้าที่การทำงาน |
+| :--- | :--- |
+| **`ultralytics`** | รัน Object Detection โมเดล `best.pt` (ค้นหากล่องล้อตัวเลขมิเตอร์ Bounding Box และพิกัด ROI) |
+| **`ai-edge-litert`** | รันโมเดล TensorFlow Lite (`.tflite`) จำแนกตัวเลขบน CPU รวดเร็วและไม่กิน RAM |
+| **`opencv-python-headless`** | ประมวลผลภาพ (Image Preprocessing, Crop, Resize) เหมาะกับ Server / Docker |
+| **`pillow`** | เปิด ปรับแต่ง และแปลง Format ไฟล์ภาพ |
+| **`numpy`** | จัดการ Array ตัวเลขและ Matrix พิกเซลของภาพ |
+| **`httpx`** | HTTP Client สำหรับคุยกับ Image Store Server (รองรับ Timeout และ Connection Pooling) |
+| **`python-dotenv`** | โหลดค่า Environment Variable จากไฟล์ `.env` |
+| **`google-genai`** หรือ **`google-generativeai`** | เรียกใช้ Gemini Vision API (Multimodal AI) ทำหน้าที่เป็น Cloud Fallback |
 
 ### 🛠️ คำสั่งติดตั้งทั้งหมด (Installation Commands)
 
@@ -268,7 +268,3 @@ docker compose down
   - มิเตอร์ใหม่ที่ยังไม่มีประวัติ จะเปิดใช้ **Day 0 Baseline Guard** (ต้องมีความมั่นใจ $\ge 0.80$ หรือส่ง Gemini ยืนยัน)
 
 ---
-
-## 🔒 ลิขสิทธิ์และการพัฒนา (License & Contributors)
-
-พัฒนาสำหรับระบบบริหารจัดการและจัดเก็บข้อมูลภาพถ่ายมิเตอร์อัจฉริยะ (Smart Utility Metering Infrastructure)
