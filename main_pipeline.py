@@ -132,15 +132,11 @@ def run_pipeline(image_path: str, meter_type: str = "auto", expected_digits: int
         score += 1000  # YOLO หากล่องไม่ครบ บวก 1000
 
     # 🔹 Stage 2: ตรวจสอบความถูกต้องด้วย Rule-Base (หลักร้อย)
-    is_valid, errors = step2_validate_rules(results, min_conf=min_conf, current_reading=raw_val, history=history, meter_type=meter_type)
+    # ถ้ายังไม่มีประวัติในงานจริง (Day 0 Baseline) ใช้เกณฑ์ความมั่นใจเข้มงวดขึ้น (อย่างน้อย 0.80) เพื่อป้องกันติดกระดุมผิดเม็ด
+    check_conf = max(0.80, min_conf) if (not history and not is_test) else min_conf
+    is_valid, errors = step2_validate_rules(results, min_conf=check_conf, current_reading=raw_val, history=history, meter_type=meter_type)
     if not is_valid:
         score += 100  # ตัวเลขอ่านไม่ออก / เบลอ / Rule ไม่ผ่าน บวก 100
-
-    # 🌟 ถ้าเป็นงานจริงที่ยังไม่มีประวัติ (Day 0 Baseline) -> ให้ Gemini ช่วยอ่านเพื่อตั้งค่าเริ่มต้น
-    if not history and not is_test and gemini_key:
-        score += 100
-        if not errors:
-            errors = ["[Day 0 Baseline] มิเตอร์ใหม่ยังไม่มีประวัติ ให้ Gemini อ่านเพื่อตั้งค่าเริ่มต้น"]
 
     # กรณี Local AI ผ่านฉลุยทั้ง 2 ด่าน (score ยังคงเป็น 0)
     if score == 0:
@@ -173,7 +169,7 @@ def run_pipeline(image_path: str, meter_type: str = "auto", expected_digits: int
             score += 20  # Gemini กู้สำเร็จและผ่านทุกกฎ บวก 20 (รวมเป็น 120 หรือ 1120)
             return {
                 "status": "APPROVED_GEMINI",
-                "reading": gemini_res["reading"],
+                "reading": raw_digits,  # ไม่มีจุด เอาเลขครบตามที่ต้องการ
                 "raw": raw_digits,
                 "reason": gemini_res.get("reason"),
                 "image_path": str(image_path),

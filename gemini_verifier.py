@@ -33,9 +33,10 @@ Our automated computer vision system tried to read this meter image, but encount
 [Issues]: {error_notes}
 
 Please carefully inspect all meter dials/wheels from left to right:
-1. Read every single digit wheel, including both black (integer) wheels and red (decimal/fractional) wheels.
-2. CRITICAL: DO NOT OMIT LEADING ZEROS. For example, if dials show 0, 0, 3, 3 and red dial 2, output "0033.2" (keep the "00"). Never shorten "0033.2" to "33.2".
-3. Return ONLY valid JSON format without markdown code blocks.
+1. Read every single digit dial/wheel from left to right.
+2. CRITICAL: DO NOT INSERT ANY DOTS OR DECIMAL POINTS. Output ONLY continuous digits (e.g. if dials show 0, 0, 3, 3, 2, output "00332" - NEVER include dots like "0033.2").
+3. CRITICAL: DO NOT OMIT LEADING ZEROS (keep "00332", never shorten to "332").
+4. Return ONLY valid JSON format without markdown code blocks.
 
 Format:
 {{
