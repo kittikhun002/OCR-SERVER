@@ -256,18 +256,16 @@ def resolve_readings(rois, cnn_preds):
 
 
 def format_output(results, meter_type="auto"):
-    """Format final reading with correct decimals and units."""
-    n = len(results)
-    red_decimals = sum(1 for r in reversed(results) if r["is_red"])
-    if red_decimals == 0:
-        red_decimals = 3 if meter_type in ("gas", "water") or (meter_type == "auto" and n >= 7) else 0
-
-    def add_dec(s, d):
-        return f"{s[:-d]}.{s[-d:]}" if d > 0 and len(s) > d else s
-
+    """Format final reading without decimals (send raw digits, let server handle formatting)."""
     raw_b, raw_a = "".join(r["val_before"] for r in results), "".join(r["val_after"] for r in results)
-    unit = " m³" if meter_type in ("gas", "water") or (meter_type == "auto" and n >= 7) else " kWh"
-    return {"raw_b": raw_b, "raw_a": raw_a, "fmt_b": f"{add_dec(raw_b, red_decimals)}{unit}", "fmt_a": f"{add_dec(raw_a, red_decimals)}{unit}"}
+    unit = " m³" if meter_type in ("gas", "water") else " kWh"
+    return {
+        "raw_b": raw_b,
+        "raw_a": raw_a,
+        "fmt_b": f"{raw_b}{unit}",
+        "fmt_a": f"{raw_a}{unit}",
+    }
+
 
 
 def save_debug_image(img_path, img, rois, results):
@@ -307,7 +305,7 @@ def read_meter(image_path, expected_digits=None, meter_type="auto"):
     print(f"--- ตรวจพบทั้งหมด {len(rois)} ช่อง ---")
     for r in rois:
         cand = ", ".join(f"{d['label']}({d['conf']:.2f})" for d in r["group"] if d["conf"] > 0) or "Auto Extrapolated"
-        red = " [🔴 หลักทศนิยม]" if r["is_red"] else ""
+        red = " [🔴 ล้อสีแดง]" if r["is_red"] else ""
         print(f"ช่อง {r['pos']}: {cand}{red}")
 
     # 3. CNN Recognition

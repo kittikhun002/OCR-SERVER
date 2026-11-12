@@ -83,7 +83,8 @@ Format:
         return {
             "success": True,
             "reading": str(data.get("meter_reading", "")),
-            "reason": str(data.get("reasoning", ""))
+            "reason": str(data.get("reasoning", "")),
+            "raw_response": text
         }
 
     except Exception as e:
@@ -93,6 +94,32 @@ Format:
 if __name__ == "__main__":
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
-        print("💡 Hint: ยังไม่ได้ตั้งค่า GEMINI_API_KEY ใน Environment")
+        print("💡 Hint: ยังไม่ได้ตั้งค่า GEMINI_API_KEY ใน Environment หรือ .env")
+        sys.exit(1)
+
+    print("✅ GEMINI_API_KEY พร้อมใช้งาน")
+
+    if len(sys.argv) > 1:
+        test_img = sys.argv[1]
+        error_notes = sys.argv[2] if len(sys.argv) > 2 else "CLI manual test"
+        print(f"\n🔍 กำลังส่งภาพไปวิเคราะห์: {test_img}")
+        if error_notes:
+            print(f"📝 หมายเหตุปัญหา: {error_notes}")
+
+        result = verify_with_gemini(test_img, error_notes=error_notes)
+
+        print("\n" + "=" * 50)
+        if result.get("raw_response"):
+            print("📩 Raw Response จาก Gemini:")
+            print(result["raw_response"])
+            print("=" * 50)
+
+        print("📊 ผลลัพธ์ที่แปลงแล้ว (Parsed Result):")
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        print("=" * 50)
     else:
-        print("✅ GEMINI_API_KEY พร้อมใช้งาน")
+        print("\n💡 วิธีสั่งรันเพื่อทดสอบภาพมิเตอร์:")
+        print("   python gemini_verifier.py <path_to_image> [ข้อความแจ้งปัญหา]")
+        print("ตัวอย่าง:")
+        print("   python gemini_verifier.py IMG_8904.JPG")
+        print('   python gemini_verifier.py IMG_8904.JPG "หลักที่ 3 เบลอ"')

@@ -241,12 +241,12 @@ def process_single_job(job: dict) -> None:
         raw_str = pipeline_output.get("raw") or ""
         reading_str = pipeline_output.get("reading") or ""
 
-        # ดึงตัวเลขพร้อมจุดทศนิยม
+        # ดึงตัวเลขดิบล้วน (ไม่ใส่จุดทศนิยม ให้ Server จัดการเรื่องทศนิยมตามประเภทมิเตอร์เอง)
         reading_parts = reading_str.strip().split() if reading_str else []
         if reading_parts:
-            digits_only = "".join(c for c in reading_parts[0] if c.isdigit() or c == ".")
+            digits_only = "".join(c for c in reading_parts[0] if c.isdigit())
         else:
-            digits_only = "".join(c for c in str(raw_str) if c.isdigit() or c == ".")
+            digits_only = "".join(c for c in str(raw_str) if c.isdigit())
 
         # -------------------------------------------------------------------
         # 🏷️ แมป error_type:

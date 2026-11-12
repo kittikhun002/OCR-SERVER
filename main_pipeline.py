@@ -135,6 +135,10 @@ def run_pipeline(image_path: str, meter_type: str = "auto", expected_digits: int
     # ถ้ายังไม่มีประวัติในงานจริง (Day 0 Baseline) ใช้เกณฑ์ความมั่นใจเข้มงวดขึ้น (อย่างน้อย 0.80) เพื่อป้องกันติดกระดุมผิดเม็ด
     check_conf = max(0.80, min_conf) if (not history and not is_test) else min_conf
     is_valid, errors = step2_validate_rules(results, min_conf=check_conf, current_reading=raw_val, history=history, meter_type=meter_type)
+
+    is_valid = False
+    errors.append("บังคับให้ผิด Rule-Base เพื่อส่งเข้า Gemini")
+    
     if not is_valid:
         score += 100  # ตัวเลขอ่านไม่ออก / เบลอ / Rule ไม่ผ่าน บวก 100
 
