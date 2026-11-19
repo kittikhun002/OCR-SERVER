@@ -28,20 +28,33 @@ def verify_with_gemini(image_path: str, error_notes: str = "", api_key: str = No
     if not image_path.exists():
         return {"success": False, "error": f"ไม่พบไฟล์ภาพ: {image_path}"}
 
-    prompt = f"""You are an expert utility meter inspector (Electric, Water, Gas meters).
+    prompt = f"""You are an expert utility meter inspector (Electric, Water, and Gas meters).
 Our automated computer vision system tried to read this meter image, but encountered uncertainties:
 [Issues]: {error_notes}
 
-Please carefully inspect all meter dials/wheels from left to right:
-1. Read every single digit dial/wheel from left to right.
-2. CRITICAL: DO NOT INSERT ANY DOTS OR DECIMAL POINTS. Output ONLY continuous digits (e.g. if dials show 0, 0, 3, 3, 2, output "00332" - NEVER include dots like "0033.2").
-3. CRITICAL: DO NOT OMIT LEADING ZEROS (keep "00332", never shorten to "332").
-4. Return ONLY valid JSON format without markdown code blocks.
+First, identify the meter type and verify its STRICT integer + decimal wheel structure:
+- Electric meter (kWh): MUST have EXACTLY 5 digits total = 4 integer digits (before decimal, black/white wheels) + 1 decimal digit (after decimal, red/framed wheel on the right).
+  Example: integer "0354" + decimal "8" -> meter_reading "03548".
+- Gas meter (m3 / dm3): MUST have EXACTLY 8 digits total = 5 integer digits (before decimal, black wheels) + 3 decimal digits (after decimal, red wheels on the right).
+  Example: integer "00123" + decimal "456" -> meter_reading "00123456".
+- Water meter: 4, 5, 7, or 8 digits total (read all rectangular roller wheels; ignore circular analog pointer sub-dials).
+
+Instructions:
+1. Read ONLY the main horizontal mechanical digit wheels from left to right. Ignore serial numbers, model codes, ratings (e.g. 220V, 5(15)A, G4, kWh), barcodes, and circular pointer sub-dials.
+2. Separate the reading into integer wheels (before decimal) and decimal wheels (red/framed wheels after decimal) to verify you did NOT miss any wheel on the left or right.
+3. CRITICAL: DO NOT INSERT ANY DOTS OR DECIMAL POINTS in "meter_reading". Concatenate integer_part + decimal_part as continuous digits ONLY (NEVER "0354.8" or "00123.456").
+4. CRITICAL: DO NOT OMIT LEADING ZEROS in integer_part or meter_reading.
+5. If a wheel is halfway rolling between two digits, check the wheel immediately to its right: if the right wheel shows 0-2 (just rolled over), pick the higher digit; if it shows 7-9 (not yet rolled over), pick the lower digit.
+6. If any wheel is completely unreadable (glare/blur/obstructed), use "?" for that position instead of guessing.
+7. Return ONLY valid JSON format without markdown code blocks.
 
 Format:
 {{
+  "meter_type": "elec",
+  "integer_part": "0354",
+  "decimal_part": "8",
   "meter_reading": "03548",
-  "reasoning": "Dials are clearly visible. Values are 0 3 5 4 8."
+  "reasoning": "Electric meter: 4 black integer dials (0 3 5 4) + 1 red decimal dial (8)."
 }}
 """
 
@@ -92,7 +105,7 @@ Format:
 
 
 if __name__ == "__main__":
-    key = os.environ.get("GEMINI_API_KEY")
+    key = (os.environ.get("GEMINI_API_KEY") or "").strip()
     if not key:
         print("💡 Hint: ยังไม่ได้ตั้งค่า GEMINI_API_KEY ใน Environment หรือ .env")
         sys.exit(1)
@@ -121,5 +134,5 @@ if __name__ == "__main__":
         print("\n💡 วิธีสั่งรันเพื่อทดสอบภาพมิเตอร์:")
         print("   python gemini_verifier.py <path_to_image> [ข้อความแจ้งปัญหา]")
         print("ตัวอย่าง:")
-        print("   python gemini_verifier.py IMG_8904.JPG")
-        print('   python gemini_verifier.py IMG_8904.JPG "หลักที่ 3 เบลอ"')
+        print("   python gemini_verifier.py /Users/macbookairm1/Downloads/YOLO/elec/m14.png")
+        print('   python gemini_verifier.py /Users/macbookairm1/Downloads/YOLO/elec/m14.png "หลักที่ 3 เบลอ"')
