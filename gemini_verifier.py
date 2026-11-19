@@ -72,7 +72,8 @@ Format:
                         mime_type="image/jpeg" if image_path.suffix.lower() in [".jpg", ".jpeg"] else "image/png"
                     ),
                     prompt
-                ]
+                ],
+                config=genai.types.GenerateContentConfig(temperature=0.0)
             )
             text = response.text.strip()
         except ImportError:
@@ -81,7 +82,10 @@ Format:
             genai.configure(api_key=api_key)
             model = genai.GenerativeModel(model_name)
             img = PIL.Image.open(image_path)
-            response = model.generate_content([prompt, img])
+            response = model.generate_content(
+                [prompt, img],
+                generation_config={"temperature": 0.0}
+            )
             text = response.text.strip()
 
         # ลบ markdown code block ออกและสกัด JSON ก้อนหลักอย่างปลอดภัย
