@@ -74,7 +74,9 @@ def step2_validate_rules(results: list, min_conf: float = 0.60, current_reading:
 # ==========================================================
 def step3_verify_with_gemini(image_path: str, errors: list, gemini_key: str = None):
     print(f"\n[ขั้นตอนที่ 3] 🤖 ส่งภาพให้ Gemini Vision ช่วยตรวจสอบ...")
-    error_summary = "; ".join(errors)
+    # กรองส่งเฉพาะปัญหาด้านภาพ (Rule 1) เพื่อไม่ให้เลขประวัติ/เลขผิดของ YOLO ไปชี้นำ Gemini
+    visual_errors = [e for e in errors if "[Rule 1]" in e]
+    error_summary = "; ".join(visual_errors) if visual_errors else "Local AI reading needs verification. Please read all dials directly from the image."
     gemini_res = verify_with_gemini(image_path, error_notes=error_summary, api_key=gemini_key)
 
     if gemini_res.get("success"):

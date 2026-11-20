@@ -87,6 +87,7 @@ def check_reading_not_decreased(current_reading: float, history: list) -> list:
 # กฎข้อที่ 3: อัตราการใช้ต้องไม่ผิดปกติ (เทียบค่าเฉลี่ย 3 เดือน)
 # ===================================================================
 USAGE_SPIKE_MULTIPLIER = float(__import__('os').getenv("USAGE_SPIKE_MULTIPLIER", "3.0"))
+USAGE_SPIKE_MIN_UNITS = float(__import__('os').getenv("USAGE_SPIKE_MIN_UNITS", "50.0"))
 
 
 def check_usage_not_abnormal(current_reading: float, history: list, spike_multiplier: float = None) -> list:
@@ -116,15 +117,11 @@ def check_usage_not_abnormal(current_reading: float, history: list, spike_multip
     avg_usage = sum(monthly_usages) / len(monthly_usages)
     current_usage = current_reading - history[-1]
 
-    # ถ้าค่าเฉลี่ยเป็น 0 (ไม่มีการใช้มา 3 เดือน) แต่เดือนนี้มีการใช้ → แจ้งเตือน
-    if avg_usage == 0 and current_usage > 0:
-        errors.append(
-            f"[Rule 3] ผิดปกติ: 3 เดือนก่อนไม่มีการใช้งานเลย (เฉลี่ย = 0) "
-            f"แต่เดือนนี้ใช้ไป {current_usage:.1f} หน่วย"
-        )
+    # ถ้าค่าเฉลี่ยเป็น 0 (ช่วงก่อนหน้าไม่มีการใช้งาน) ข้ามการเช็ก spike เพื่อไม่ให้ตีตกเมื่อเริ่มมีการใช้งานปกติ
+    if avg_usage == 0:
         return errors
 
-    if avg_usage > 0 and current_usage > avg_usage * spike_multiplier:
+    if avg_usage > 0 and current_usage >= USAGE_SPIKE_MIN_UNITS and current_usage > avg_usage * spike_multiplier:
         errors.append(
             f"[Rule 3] อัตราการใช้ผิดปกติ: "
             f"เดือนนี้ใช้ไป {current_usage:.1f} หน่วย "
